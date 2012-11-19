@@ -5,7 +5,7 @@
 * run `advcal -c advent.ini --today=2012-12-25`
 * inspect `out/`
 
-## Article Ideas
+## Unclaimed Article Ideas
 
 * intro
   * where to get it
@@ -50,14 +50,24 @@
   * ???
 * bread::board (underlying structure)
 * without the sugar
-* external scripts, cronjobs, etc (basically: here's where Bread::Board puts Catalyst to shame)
 * custom routebuilders
 * external routers
 * roles as plugins
 * example of authentication against a model (using middleware, not using middleware) -- or just translate http://www.catalystframework.org/calendar/2011/15 || http://www.catalystframework.org/calendar/2007/5 || http://www.catalystframework.org/calendar/2007/6
 * extend authentication example into authorization
 * example of q&d "dancer-style" inline app
-* config (I'm not in love with what I did for Appfarm, would love to see more ideas -- shawn)
 * simple app: filesystem-based wiki (ala http://www.catalystframework.org/calendar/2009/3 || http://advent.perldancer.org/2010/3 || http://advent.perldancer.org/2010/15 || http://advent.perldancer.org/2011/7)
 * input validation example a la http://www.catalystframework.org/calendar/2010/10
 * example of converting existing catalyst app to OX, benefits, pitfalls
+
+## Claimed Article Ideas
+
+### doy
+
+### genehack
+
+### sartak
+
+* external scripts, cronjobs, etc
+  * here's where Bread::Board puts Catalyst to shame)
+* config
