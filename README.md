@@ -63,3 +63,4 @@
 * external scripts, cronjobs, etc (sartak)
   * here's where Bread::Board puts Catalyst to shame)
 * config (sartak)
+* composing multiple OX applications
