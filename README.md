@@ -5,9 +5,9 @@
 * run `advcal -c advent.ini --today=2012-12-25`
 * inspect `out/`
 
-## Unclaimed Article Ideas
+## Article Ideas
 
-* intro
+* intro (doy)
   * where to get it
   * basic concept - combination of Bread::Board, Plack, and Path::Router
   * example of a basic OX app
@@ -27,12 +27,9 @@
 * middleware
   * wraps the application (just Plack middleware)
   * give examples?
-* HTTP::Throwable
-  * HTTPExceptions middleware is applied by default, so this just works
-  * examples
-* bread::board::declare
+* bread::board::declare (doy)
   * overview of usage - attributes
-* dependencies
+* dependencies (doy)
   * explicit dependencies
   * infer => 1
 * ox::request
@@ -43,15 +40,19 @@
 * `uri_for`
   * reverse of routing
   * defaults and validations
-* roles and inheritance
+* HTTP::Throwable
+  * HTTPExceptions middleware is applied by default, so this just works
   * examples
 * psgi
   * how to write a .psgi file for your app (and what belongs in it)
+  * deployment?
   * ???
-* bread::board (underlying structure)
-* without the sugar
-* custom routebuilders
-* external routers
+* roles and inheritance
+  * examples
+* bread::board (underlying structure) (doy)
+* without the sugar (doy)
+* custom routebuilders (doy)
+* external routers (doy)
 * roles as plugins
 * example of authentication against a model (using middleware, not using middleware) -- or just translate http://www.catalystframework.org/calendar/2011/15 || http://www.catalystframework.org/calendar/2007/5 || http://www.catalystframework.org/calendar/2007/6
 * extend authentication example into authorization
@@ -59,15 +60,6 @@
 * simple app: filesystem-based wiki (ala http://www.catalystframework.org/calendar/2009/3 || http://advent.perldancer.org/2010/3 || http://advent.perldancer.org/2010/15 || http://advent.perldancer.org/2011/7)
 * input validation example a la http://www.catalystframework.org/calendar/2010/10
 * example of converting existing catalyst app to OX, benefits, pitfalls
-
-## Claimed Article Ideas
-
-### doy
-
-### genehack
-
-### sartak
-
-* external scripts, cronjobs, etc
+* external scripts, cronjobs, etc (sartak)
   * here's where Bread::Board puts Catalyst to shame)
-* config
+* config (sartak)
