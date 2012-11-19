@@ -2,7 +2,7 @@
 
 * install `WWW::AdventCalendar`
 * write something in `articles/`
-* run `advcal -c advent.ini`
+* run `advcal -c advent.ini --today=2012-12-25`
 * inspect `out/`
 
 ## Article Ideas
