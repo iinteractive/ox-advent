@@ -2,8 +2,8 @@
 
 * install `WWW::AdventCalendar`
 * write something in `articles/`
-* run `advcal`
-* inspect `share/`
+* run `advcal -c advent.ini`
+* inspect `out/`
 
 ## Article Ideas
 
