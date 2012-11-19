@@ -40,7 +40,7 @@
   * differences in parameter handling
   * encodings
   * mappings
-* uri_for
+* `uri_for`
   * reverse of routing
   * defaults and validations
 * roles and inheritance
