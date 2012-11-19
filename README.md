@@ -1,3 +1,12 @@
+## Running
+
+* install `WWW::AdventCalendar`
+* write something in `articles/`
+* run `advcal`
+* inspect `share/`
+
+## Article Ideas
+
 * intro
   * where to get it
   * basic concept - combination of Bread::Board, Plack, and Path::Router
