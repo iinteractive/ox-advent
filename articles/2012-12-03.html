@@ -1,0 +1,96 @@
+Title: Routes and Path::Router
+Topic: OX
+Author: Jesse Luehrs <jesse.luehrs@iinteractive.com>
+
+=head1 Routing
+
+Routing is the step that takes an HTTP request and decides what code should
+actually be run. Although any part of the request can be used here, in practice
+routing happens by only looking at the path (and maybe the HTTP method).
+
+L<Path::Router> is a module which can take an incoming path and return which of
+a set of route definitions it matched. OX uses this as the basis for its
+routing. It handles solely the path aspect of routing - routing based on other
+things (such as HTTP methods) must be handled via route builders.
+
+=head2 Basic routes
+
+  router as {
+      route '/'           => 'root.index';
+      route '/archive'    => 'posts.archive';
+      route '/auth/login' => 'auth.login';
+  };
+
+The simplest form of routes consists of just a literal string, to be matched
+against the incoming path. This only looks at the path itself (to be specific,
+the L<PSGI> C<PATH_INFO> variable), so any query parameters are ignored. If the
+path in the incoming request is equal to any of the paths defined in the
+router, that path is chosen, and its associated code is run to create the
+response. If no path matches, a 404 response is returned.
+
+=head2 Route variables
+
+Some routes need to contain variable components. These can be specified by a
+leading colon:
+
+  router as {
+      route '/:id' => sub { my ($r, $id) = @_; return $id };
+  };
+
+In this case, this route doesn't match just the path C</view/:id>, but any path
+that starts with C</view/> and contains exactly one additional path component:
+C</view/24>, C</view/c9625979-976a-4cf1-b557-7cf5bd591d0d>, etc. When the code
+for the route is called, the variable path components will be passed as
+additional arguments, in order, after the request object.
+
+Variable routes do make routing more complicated, however, since paths can now
+potentially match multiple different routes. If a path is given which does
+match multiple routes, the route with the fewest variable path components is
+chosen. For instance, given this router:
+
+  router as {
+      route '/view/:id'    => 'posts.view_specific_post';
+      route '/view/default => 'posts.view_default_post';
+  };
+
+a request for C</view/default> will match the C<view_default_post> route. If
+there are multiple routes with the fewest variable path components, an error
+will be thrown (so don't do that).
+
+=head3 Optional routes
+
+Sometimes the path component isn't actually necessary at all. In this case, you
+can prefix the path variable with a question mark to indicate that including it
+is not actually necessary (path components must otherwise be non-empty
+strings). For instance:
+
+  router as {
+      route '/view/?:id' => 'posts.view_specific_post';
+  };
+
+In this case, C</view> is also a valid path, and the argument passed to the
+route's code will be C<undef>.
+
+=head3 Validations
+
+Sometimes you want a bit more control than just "does the path component
+exist?". In this case, you can specify constraints to validate the path
+variables. For instance:
+
+  router as {
+      route '/view/:id' => 'posts.view_by_id', (
+          id => { isa => 'Int' },
+      );
+      route '/view/:search' => 'posts.search', (
+          id => { isa => qr/^\w/ },
+      );
+  };
+
+This will route C</view/123> to C<view_by_id>, and C</view/foobar> to
+C<search>. Validations must be specified by a hash following the action spec,
+where the keys are names of variable path components and the values are
+hashrefs with an C<isa> entry. Validations can be either Moose type constraints
+(either type constraint names or type constraint objects) or regular
+expressions.
+
+=cut
