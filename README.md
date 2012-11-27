@@ -61,6 +61,6 @@
 * input validation example a la http://www.catalystframework.org/calendar/2010/10
 * example of converting existing catalyst app to OX, benefits, pitfalls
 * external scripts, cronjobs, etc (sartak)
-  * here's where Bread::Board puts Catalyst to shame)
-* config (sartak)
+  * here's where Bread::Board puts Catalyst to shame
+* config (done)
 * composing multiple OX applications
