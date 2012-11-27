@@ -1,0 +1,6 @@
+Title: Scripts outside of OX
+Topic: OX
+Author: Shawn M Moore <shawn.moore@iinteractive.com>
+
+A web application often does more than simply wait for HTTP requests and serve them. There are periodic tasks managed by C<cron>, deferred job-queue tasks managed by L<TheSchwartz> or C<q4m> or thier ilk, simple administrative scripts, and so on. You certainly want to reuse the code from your application in these external tools, but if they exist outside the HTTP request lifecycle, how do you achieve that?
+
