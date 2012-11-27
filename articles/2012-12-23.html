@@ -3,9 +3,13 @@ Topic: OX
 Author: Shawn M Moore <shawn.moore@iinteractive.com>
 
 L<OX> has no built-in configuration management system. Instead, the
-design of OX makes it easy to roll your own. This article describes
-one opinionated way to structure your configuration using
-L<Config::JFDI>. There are many like it, but this one is mine.
+design of OX makes it easy to roll your own. Typically configuration
+will be a layer outside of your application, such that your
+configuration initializes your application.
+
+This article describes one opinionated way to structure your
+application's configuration using L<Config::JFDI>.  There are many
+like it, but this one is mine.
 
 =head2 Site-Specific Configuration
 
