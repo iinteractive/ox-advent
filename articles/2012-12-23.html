@@ -1,0 +1,202 @@
+Title: Configuration with OX
+Topic: OX
+Author: Shawn M Moore <shawn.moore@iinteractive.com>
+
+L<OX> has no built-in configuration management system. Instead, the
+design of OX makes it easy to roll your own. This article describes
+one opinionated way to structure your configuration using
+L<Config::JFDI>. There are many like it, but this one is mine.
+
+=head2 Site-Specific Configuration
+
+As an application grows out of its prototype and early design phases,
+it becomes more and more important that it adapt to each environment
+it runs in. For example, you might need to start running the
+production database on a different machine just to spread the load
+around. So you change the C<dsn> from C<localhost> to C<db.example.com>.
+Done deal!
+
+Except now all the developers are testing their local changes against
+the production database. That's nuts!
+
+What you really want is a configuration file for developers which
+specifies that their database lives on C<localhost>, and a production
+configuration file which points to C<db.example.com>.  This approach
+scales to additional environments like a QA site, a continuous-integration
+machine, and so on. You might even have a second, unversioned config
+file where each developer can put config specific to their machine.
+
+=head2 Implementation
+
+=head3 C<MyApp::Config>
+
+The centerpiece of this opinionated design is an C<MyApp::Config>
+which is a class that, unsurprisingly, manages the configuration
+of this application. This class is responsible for deciding which
+config file to load (production? development?) and keeping track
+of the contents of that file. Here's what it might look like:
+
+    package MyApp::Config;
+    use 5.16.0;
+    use Moose;
+    use Config::JFDI;
+
+    has filename => (
+        is      => 'ro',
+        isa     => 'Str',
+        default => sub { "myapp.$ENV{MYAPP_CONFIG_SUFFIX}" },
+    );
+
+    has config => (
+        is      => 'ro',
+        isa     => 'Config::JFDI',
+        lazy    => 1,
+        default => sub {
+            my ($self) = @_;
+            return Config::JFDI->new(
+                name => $self->filename,
+                path => 'config/,
+            );
+        },
+    );
+    
+    sub get {
+        my ($self, $key) = @_;
+        return $self->config->config->{$key};
+    }
+    
+    sub as_hash {
+        my ($self) = @_;
+        return $self->config->config;
+    }
+
+The C<filename> attribute looks at the C<MYAPP_CONFIG_SUFFIX>
+environment variable to decide which config file to use. The suffix
+corresponds to the environment the application is in. For developers
+the suffix might be C<dev>, and for production the suffix might be
+C<prod>. This means that L<Config::JFDI> will try to load
+F<config/myapp.dev.yml> for developers and F<config/myapp.prod.yml>
+in production. (L<Config::JFDI> supports loading many different
+file formats but for config, I prefer L<YAML>.)
+
+I like providing C<get> and C<as_hash> methods in my config class
+to hide the implementation details of L<Config::JFDI> as much as
+possible. Otherwise, pulling a setting's value out would involve
+calling C<< $config->config->config->get("dsn") >>, and that is an
+awful lot to ask of anybody. Instead, now
+C<< $config->get("dsn") >> suffices.
+
+=head3 F<config/myapp.*.yml>
+
+The config file is simply YAML. The developer config might look like:
+
+    ---
+    dsn: 'mysql:database=myapp;host=localhost'
+    compile_templates: 0
+
+The production config might look like:
+
+    ---
+    dsn: 'mysql:database=myapp;host=db.example.com'
+    compile_templates: 1
+
+No problem!
+
+=head3 F<app.psgi>
+
+We have a config file and a config loader, but these aren't actually
+being used anywhere. L<OX> certainly won't intuit that these
+components exist, since explicit declarations are The OX Way. So
+how do we use our config?
+
+The answer is probably what you'd expect: you load config to use
+when instantiating your application. You simply just pass the
+config variables to C<< MyApp->new(...) >>.
+
+Your PSGI script would then look like this:
+
+    use MyApp;
+    use MyApp::Config;
+    my $config = MyApp::Config->new;
+    
+    MyApp->new(
+        dsn               => $config->get('dsn'),
+        compile_templates => $config->get('compile_templates'),
+    )->to_app;
+
+Since you're probably going to end up adding many different options,
+you'll want that to have as little friction as possibly. Just pass
+everything the config specifies into C<< MyApp->new >>.
+
+    MyApp->new(
+        %{ $config->as_hash },
+    );
+
+=head3 C<MyApp>
+
+The final piece is making C<MyApp> accept and use these new constructor
+parameters. Since C<MyApp> uses L<Bread::Board::Declare> you can
+create services for each of these parameters with the familiar
+L<Moose/has> syntax.
+
+    has dsn => (
+        is       => 'ro',
+        isa      => 'Str',
+        required => 1,
+    );
+    
+    has compile_templates => (
+        is       => 'ro',
+        isa      => 'Bool',
+        required => 1,
+    );
+
+Finally, using the magic of L<Bread::Board> you can wire these new
+services into your existing C<database> and C<view> attributes.
+
+    has database => (
+        is           => 'ro',
+        dependencies => [qw[dsn]],
+        block        => sub {
+            my ($s) = @_;
+            my $dsn = $s->param('dsn');
+            return DBI->connect($dsn);
+        },
+    );
+    
+    has view => (
+        is           => 'ro',
+        dependencies => [qw[compile_templates]],
+        block        => sub {
+            my ($s) = @_;
+            my $compile_templates = $s->param('compile_templates');
+            return ...
+        },
+    );
+
+=head2 Developer-Specific Configuration
+
+One of the many benefits of using a system like L<Config::JFDI> is
+that it supports I<overlays>. An individual developer can adjust
+specific settings in a file called F<config/myapp.dev_local.yml>
+which will be merged with the baseline config in F<config/myapp.dev.yml>.
+Say one of the developers runs their MySQL on a different machine. That
+developer can put this into a F<config/myapp.dev_local.yml>:
+
+    ---
+    dsn: 'mysql:database=myapp;host=arrakis.local'
+
+Now, when L<DBI> connects to the database on this developer's
+machine, it will get the correct C<dsn>. And it won't disrupt anyone
+else, because this config file is specific to that developer.
+Finally, since C<_local> configs inherit settings from the baseline
+config file, options like C<compile_templates> will trickle down
+from the ordinary developer config file.
+
+This works especially well if you version C<config/myapp.dev.yml>
+and put C<config/myapp.dev_local.yml> into F<.gitignore>. That way
+if a developer adds new baseline config to C<config/myapp.dev.yml>,
+everyone gets it for free; no vigilance needed.
+
+=cut
+
