@@ -18,25 +18,25 @@
   * overview of Path::Router
   * route syntax
   * validations?
-* mounts
-  * includes an entirely separate PSGI application under a given path
-  * also, inline mounts
 * bread::board::declare (doy)
   * overview of usage - attributes
 * dependencies (doy)
   * explicit dependencies
   * infer => 1
+* middleware (doy)
+  * wraps the application (just Plack middleware)
+  * examples
+* mounts
+  * includes an entirely separate PSGI application under a given path
+  * also, inline mounts
+* views
+  * just normal classes, nothing special at all
+  * can also be controllers themselves, to bypass the need for extra logic
 * ox::request
   * mostly modeled after Plack::Request
   * differences in parameter handling
   * encodings
   * mappings
-* middleware (doy)
-  * wraps the application (just Plack middleware)
-  * examples
-* views
-  * just normal classes, nothing special at all
-  * can also be controllers themselves, to bypass the need for extra logic
 * `uri_for`
   * reverse of routing
   * defaults and validations
