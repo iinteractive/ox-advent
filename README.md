@@ -23,7 +23,7 @@
 * dependencies (doy)
   * explicit dependencies
   * infer => 1
-* middleware (doy)
+* middleware (done)
   * wraps the application (just Plack middleware)
   * examples
 * mounts
