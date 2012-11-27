@@ -18,9 +18,6 @@
   * overview of Path::Router
   * route syntax
   * validations?
-* views
-  * just normal classes, nothing special at all
-  * can also be controllers themselves, to bypass the need for extra logic
 * mounts
   * includes an entirely separate PSGI application under a given path
   * also, inline mounts
@@ -37,6 +34,9 @@
   * differences in parameter handling
   * encodings
   * mappings
+* views
+  * just normal classes, nothing special at all
+  * can also be controllers themselves, to bypass the need for extra logic
 * `uri_for`
   * reverse of routing
   * defaults and validations
