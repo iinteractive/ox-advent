@@ -10,8 +10,8 @@ routing happens by only looking at the path (and maybe the HTTP method).
 
 L<Path::Router> is a module which can take an incoming path and return which of
 a set of route definitions it matched. OX uses this as the basis for its
-routing. It handles solely the path aspect of routing - routing based on other
-things (such as HTTP methods) must be handled via route builders.
+routing. Path::Router handles solely the path aspect of routing - routing based
+on other things (such as HTTP methods) must be handled via route builders.
 
 =head2 Basic routes
 
@@ -21,12 +21,12 @@ things (such as HTTP methods) must be handled via route builders.
       route '/auth/login' => 'auth.login';
   };
 
-The simplest form of routes consists of just a literal string, to be matched
-against the incoming path. This only looks at the path itself (to be specific,
-the L<PSGI> C<PATH_INFO> variable), so any query parameters are ignored. If the
-path in the incoming request is equal to any of the paths defined in the
-router, that path is chosen, and its associated code is run to create the
-response. If no path matches, a 404 response is returned.
+The simplest pattern for matching paths consists of just a literal string, to
+be matched against the incoming path. This only looks at the path itself (to be
+specific, the L<PSGI> C<PATH_INFO> variable), so any query parameters are
+ignored. If the path in the incoming request is equal to any of the paths
+defined in the router, that path is chosen, and its associated code is run to
+create the response. If no path matches, a 404 response is returned.
 
 =head2 Route variables
 
@@ -89,8 +89,7 @@ variables. For instance:
 This will route C</view/123> to C<view_by_id>, and C</view/foobar> to
 C<search>. Validations must be specified by a hash following the action spec,
 where the keys are names of variable path components and the values are
-hashrefs with an C<isa> entry. Validations can be either Moose type constraints
-(either type constraint names or type constraint objects) or regular
-expressions.
+hashrefs with an C<isa> entry. Each validation can be either a Moose type
+constraint (a type name or a type constraint object) or a regular expression.
 
 =cut

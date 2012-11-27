@@ -4,10 +4,12 @@ Author: Jesse Luehrs <jesse.luehrs@iinteractive.com>
 
 =head1 The C<route> keyword
 
-The C<route> keyword takes two required arguments, and an optional hash of
-additional data. The two required arguments are the I<path> and the
-I<action spec>. Valid values for the path will be described tomorrow, but
-today's article is how the action spec is interpreted.
+The C<route> keyword maps a I<path> to an I<action spec>. A path is a pattern
+that resembles a URI path, which OX attempts to match against the incoming
+request URI. An action spec can take many forms, but it essentially describes
+what code will run when the corresponding path is matched. The path syntax and
+features will be described tomorrow, but today's article is about how the
+action spec is interpreted.
 
 =head1 Route builders
 
@@ -50,6 +52,13 @@ up a controller to use and a method to call on that controller. The controller
 is looked up by name among the attributes on the OX application (really
 services, but we will discuss that when we explain Bread::Board).
 
+The code which is run for the above example is roughly equivalent to:
+
+  sub {
+      my $controller = $self->root;
+      return $controller->index(@_);
+  }
+
 =item *
 
 L<OX::RouteBuilder::HTTPMethod>
@@ -62,6 +71,17 @@ ControllerAction route builder, but the method to call will be the lowercase
 version of the HTTP method used (C<get>, C<post>, etc). If no appropriate
 method is found in the class, it will attempt to call the method named C<any>
 instead. If that is also not found, the request will return a 405 error.
+
+The code which is run for the above example is roughly equivalent to:
+
+  sub {
+      my ($r) = @_;
+      my $controller = $self->root;
+      my $method = lc($r->method);
+      $method = 'any'             if !$controller->can($method);
+      return [405, [], ["error"]] if !$controller->can($method);
+      return $controller->$method(@_);
+  }
 
 =back
 

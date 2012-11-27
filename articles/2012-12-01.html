@@ -6,15 +6,16 @@ Author: Jesse Luehrs <jesse.luehrs@iinteractive.com>
 
 L<OX> is a new web framework, designed to allow easily gluing together existing
 components (or writing new, highly decoupled components) for your application,
-without requiring additional plugin systems, glue layers, or global state. It
-is based on three main components:
+without requiring additional plugin systems, glue layers, or global state. It is available on L<CPAN|OX>, and on L<GitHub|http://github.com/iinteractive/OX>. You can install it via C<cpanm OX>.
+
+OX is based on three main components:
 
 =head2 Plack
 
 L<Plack> is an implementation of the L<PSGI> protocol. By implementing PSGI, OX
 can run on any server platform that PSGI supports (which is most of them).
 Plack also provides extra functionality such as middleware, which OX exposes to
-application writers (as will be described in future articles).
+application authors (as will be described in future articles).
 
 =head2 Bread::Board
 
@@ -34,21 +35,23 @@ your application's URL structure.
 
 =head1 Hello World
 
-  package MyApp;
   use OX;
 
   router as {
       route '/' => sub { "Hello world!" };
   };
 
-This defines a simple "Hello world" application. If you install L<OX> from
-CPAN, you can put this code into a C<.psgi> file, and run it using C<plackup>.
+This defines a simple "Hello world" application.
+
+=for html
+If you download this example <a href="hello.psgi">here</a>, you can run it with
+<tt>plackup hello.psgi</tt>, and view the results in your browser.
 
 The router block is the most important part of an OX application. It defines
 the entire URL structure in one place, making tracing the code that is run for
 a given request as easy as possible to find. Simple routes can define the code
-to be run directly, but for anything non-trivial, there are other
-possibilities, as shown in this next example.
+to be run directly, but for anything non-trivial, you'll want to organize the
+code into models, controllers, etc., as shown in this next example.
 
 =head1 Another example
 
