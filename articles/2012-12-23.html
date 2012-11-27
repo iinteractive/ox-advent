@@ -77,12 +77,12 @@ the suffix might be C<dev>, and for production the suffix might be
 C<prod>. This means that L<Config::JFDI> will try to load
 F<config/myapp.dev.yml> for developers and F<config/myapp.prod.yml>
 in production. (L<Config::JFDI> supports loading many different
-file formats but for config, I prefer L<YAML>.)
+file formats, but for config I prefer L<YAML>.)
 
 I like providing C<get> and C<as_hash> methods in my config class
 to hide the implementation details of L<Config::JFDI> as much as
 possible. Otherwise, pulling a setting's value out would involve
-calling C<< $config->config->config->get("dsn") >>, and that is an
+calling C<< $config->config->config->{dsn} >>, and that is an
 awful lot to ask of anybody. Instead, now
 C<< $config->get("dsn") >> suffices.
 
@@ -110,10 +110,9 @@ components exist, since explicit declarations are The OX Way. So
 how do we use our config?
 
 The answer is probably what you'd expect: you load config to use
-when instantiating your application. You simply just pass the
-config variables to C<< MyApp->new(...) >>.
-
-Your PSGI script would then look like this:
+when instantiating your application. You simply just pass the config
+variables to C<< MyApp->new(...) >>. Your PSGI script would then
+look like this:
 
     use MyApp;
     use MyApp::Config;
@@ -125,8 +124,9 @@ Your PSGI script would then look like this:
     )->to_app;
 
 Since you're probably going to end up adding many different options,
-you'll want that to have as little friction as possibly. Just pass
-everything the config specifies into C<< MyApp->new >>.
+you'll want that to have as little friction as possible. After all,
+that kind of code is a breeding ground for merge conflicts. Instead,
+just pass everything the config specifies into C<< MyApp->new >>.
 
     MyApp->new(
         %{ $config->as_hash },
