@@ -21,9 +21,6 @@
 * mounts
   * includes an entirely separate PSGI application under a given path
   * also, inline mounts
-* middleware
-  * wraps the application (just Plack middleware)
-  * give examples?
 * bread::board::declare (doy)
   * overview of usage - attributes
 * dependencies (doy)
@@ -34,6 +31,13 @@
   * differences in parameter handling
   * encodings
   * mappings
+* middleware (sartak)
+  * wraps the application (just Plack middleware)
+  * examples
+    * ErrorDocument
+    * Proxy
+    * Conditional / `wrap_if`
+    * domain-specific middleware including B:B usage
 * views
   * just normal classes, nothing special at all
   * can also be controllers themselves, to bypass the need for extra logic
