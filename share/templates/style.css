@@ -233,7 +233,7 @@ pre {
   padding-bottom: 1em;
   background-color: <% $color{codeBG} %>;
   color: <% $color{codeFG} %>;
-  font-family: monospace;
+  font-family: "Consolas","Bitstream Vera Sans Mono","Courier New",Courier,monospace !important;
   width: 100%;
 }
 
