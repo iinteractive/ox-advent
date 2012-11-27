@@ -241,10 +241,14 @@ pre {
   line-height: 120%;
   background-color: <% $color{codeBG} %>;
   color: <% $color{codeFG} %>;
-  font-family: monospace;
   white-space: pre;
   border-collapse: collapse;
   width: 100%;
+}
+
+pre, code, .code-listing {
+  font-family: "Consolas","Bitstream Vera Sans Mono","Courier New",Courier,monospace;
+  font-size: 1em;
 }
 
 .code-listing td {
