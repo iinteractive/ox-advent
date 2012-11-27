@@ -2,7 +2,7 @@ Title: Middleware
 Topic: OX
 Author: Jesse Luehrs <jesse.luehrs@iinteractive.com>
 
-=head1 Middleware
+=head1 Plack Middleware
 
 Middleware are a concept from L<Plack> which allow you to intercept requests
 before they are seen by your application, and manipulate responses before they
@@ -24,9 +24,7 @@ use in your application directly.
 
 =head1 The C<wrap> keyword
 
-Middleware can be added to your application via the C<wrap> keyword, which must
-be called inside a C<router> block. Middleware can be specified in one of three
-ways:
+The C<wrap> keyword is how you add middleware to your OX application. C<wrap> must be called inside a C<router> block. Middleware can be specified in one of three ways:
 
 =over 4
 
