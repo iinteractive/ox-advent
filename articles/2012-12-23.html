@@ -75,7 +75,7 @@ environment variable to decide which config file to use. The suffix
 corresponds to the environment the application is in. For developers
 the suffix might be C<dev>, and for production the suffix might be
 C<prod>. This means that L<Config::JFDI> will try to load
-F<config/myapp.dev.yml> for developers and F<config/myapp.prod.yml>
+C<config/myapp.dev.yml> for developers and C<config/myapp.prod.yml>
 in production. (L<Config::JFDI> supports loading many different
 file formats, but for config I prefer L<YAML>.)
 
@@ -86,7 +86,7 @@ calling C<< $config->config->config->{dsn} >>, and that is an
 awful lot to ask of anybody. Instead, now
 C<< $config->get("dsn") >> suffices.
 
-=head3 F<config/myapp.*.yml>
+=head3 C<config/myapp.*.yml>
 
 The config file is simply YAML. The developer config might look like:
 
@@ -102,7 +102,7 @@ The production config might look like:
 
 No problem!
 
-=head3 F<app.psgi>
+=head3 C<app.psgi>
 
 We have a config file and a config loader, but these aren't actually
 being used anywhere. L<OX> certainly won't intuit that these
@@ -178,10 +178,10 @@ services into your existing C<database> and C<view> attributes.
 
 One of the many benefits of using a system like L<Config::JFDI> is
 that it supports I<overlays>. An individual developer can adjust
-specific settings in a file called F<config/myapp.dev_local.yml>
-which will be merged with the baseline config in F<config/myapp.dev.yml>.
+specific settings in a file called C<config/myapp.dev_local.yml>
+which will be merged with the baseline config in C<config/myapp.dev.yml>.
 Say one of the developers runs their MySQL on a different machine. That
-developer can put this into a F<config/myapp.dev_local.yml>:
+developer can put this into a C<config/myapp.dev_local.yml>:
 
     ---
     dsn: 'mysql:database=myapp;host=arrakis.local'
@@ -194,7 +194,7 @@ config file, options like C<compile_templates> will trickle down
 from the ordinary developer config file.
 
 This works especially well if you version C<config/myapp.dev.yml>
-and put C<config/myapp.dev_local.yml> into F<.gitignore>. That way
+and put C<config/myapp.dev_local.yml> into C<.gitignore>. That way
 if a developer adds new baseline config to C<config/myapp.dev.yml>,
 everyone gets it for free; no vigilance needed.
 
