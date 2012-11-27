@@ -7,17 +7,17 @@
 
 ## Article Ideas
 
-* intro (doy)
+* intro (done)
   * where to get it
   * basic concept - combination of Bread::Board, Plack, and Path::Router
   * example of a basic OX app
-* routes and path::router
+* routebuilders and controllers (done)
+  * basic structure - takes an OX::Request + path variables, returns a response
+  * go over the default route builders
+* routes and path::router (done)
   * overview of Path::Router
   * route syntax
   * validations?
-* routebuilders and controllers
-  * basic structure - takes an OX::Request + path variables, returns a response
-  * go over the default route builders
 * views
   * just normal classes, nothing special at all
   * can also be controllers themselves, to bypass the need for extra logic
