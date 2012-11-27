@@ -123,11 +123,17 @@ code into models, controllers, etc., as shown in this next example.
 
 This is a slightly more involved example. Here, paths are routed to methods on
 controller objects, and OX automatically figures out (via Bread::Board) how to
-create all of the objects necessary to make the request work. One interesting
-thing to note is how the controller and model are both just normal Moose
-classes - there is nothing special about them at all. Your application can be
-structured in any way that you want, and OX will do the work of introspecting
-and tying together all of the pieces. We will explain how exactly this works
-over the coming weeks.
+create all of the objects necessary to make the request work.
+
+=for html
+This example can be downloaded <a href="counter.psgi">here</a>, and run via
+<tt>plackup counter.psgi</tt>. Access the <tt>/inc</tt>, <tt>/dec</tt>, and
+<tt>/reset</tt> paths to manipulate the counter.
+
+One interesting thing to note is how the controller and model are both just
+normal Moose classes - there is nothing special about them at all. Your
+application can be structured in any way that you want, and OX will do the work
+of introspecting and tying together all of the pieces. We will explain how
+exactly this works over the coming weeks.
 
 =cut
