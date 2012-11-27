@@ -35,11 +35,15 @@ your application's URL structure.
 
 =head1 Hello World
 
+=begin vim perl
+
   use OX;
 
   router as {
       route '/' => sub { "Hello world!" };
   };
+
+=end vim
 
 This defines a simple "Hello world" application. This snippet is a valid
 C<.psgi> file (the format used by L<Plack>), since the C<router> keyword
@@ -56,6 +60,8 @@ to be run directly, but for anything non-trivial, you'll want to organize the
 code into models, controllers, etc., as shown in this next example.
 
 =head1 Another example
+
+=begin vim perl
 
   package Counter::Model;
   use Moose;
@@ -122,6 +128,8 @@ code into models, controllers, etc., as shown in this next example.
       route '/dec'   => 'controller.dec';
       route '/reset' => 'controller.reset';
   };
+
+=end vim
 
 This is a slightly more involved example. Here, paths are routed to methods on
 controller objects, and OX automatically figures out (via Bread::Board) how to

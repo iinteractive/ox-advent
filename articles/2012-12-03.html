@@ -15,11 +15,15 @@ on other things (such as HTTP methods) must be handled via route builders.
 
 =head2 Basic routes
 
+=begin vim perl
+
   router as {
       route '/'           => 'root.index';
       route '/archive'    => 'posts.archive';
       route '/auth/login' => 'auth.login';
   };
+
+=end vim
 
 The simplest pattern for matching paths consists of just a literal string, to
 be matched against the incoming path. This only looks at the path itself (to be
@@ -33,9 +37,13 @@ create the response. If no path matches, a 404 response is returned.
 Some routes need to contain variable components. These can be specified by a
 leading colon:
 
+=begin vim perl
+
   router as {
       route '/:id' => sub { my ($r, $id) = @_; return $id };
   };
+
+=end vim
 
 In this case, this route doesn't match just the path C</view/:id>, but any path
 that starts with C</view/> and contains exactly one additional path component:
@@ -48,10 +56,14 @@ potentially match multiple different routes. If a path is given which does
 match multiple routes, the route with the fewest variable path components is
 chosen. For instance, given this router:
 
+=begin vim perl
+
   router as {
       route '/view/:id'    => 'posts.view_specific_post';
       route '/view/default => 'posts.view_default_post';
   };
+
+=end vim
 
 a request for C</view/default> will match the C<view_default_post> route. If
 there are multiple routes with the fewest variable path components, an error
@@ -64,9 +76,13 @@ can prefix the path variable with a question mark to indicate that including it
 is not actually necessary (path components must otherwise be non-empty
 strings). For instance:
 
+=begin vim perl
+
   router as {
       route '/view/?:id' => 'posts.view_specific_post';
   };
+
+=end vim
 
 In this case, C</view> is also a valid path, and the argument passed to the
 route's code will be C<undef>.
@@ -77,6 +93,8 @@ Sometimes you want a bit more control than just "does the path component
 exist?". In this case, you can specify constraints to validate the path
 variables. For instance:
 
+=begin vim perl
+
   router as {
       route '/view/:id' => 'posts.view_by_id', (
           id => { isa => 'Int' },
@@ -85,6 +103,8 @@ variables. For instance:
           id => { isa => qr/^\w/ },
       );
   };
+
+=end vim
 
 This will route C</view/123> to C<view_by_id>, and C</view/foobar> to
 C<search>. Validations must be specified by a hash following the action spec,

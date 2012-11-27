@@ -40,6 +40,8 @@ of this application. This class is responsible for deciding which
 config file to load (production? development?) and keeping track
 of the contents of that file. Here's what it might look like:
 
+=begin vim perl
+
     package MyApp::Config;
     use 5.16.0;
     use Moose;
@@ -74,6 +76,8 @@ of the contents of that file. Here's what it might look like:
         return $self->config->config;
     }
 
+=end vim
+
 The C<filename> attribute looks at the C<MYAPP_CONFIG_SUFFIX>
 environment variable to decide which config file to use. The suffix
 corresponds to the environment the application is in. For developers
@@ -94,15 +98,23 @@ C<< $config->get("dsn") >> suffices.
 
 The config file is simply YAML. The developer config might look like:
 
+=begin vim yaml
+
     ---
     dsn: 'mysql:database=myapp;host=localhost'
     compile_templates: 0
 
+=end vim
+
 The production config might look like:
+
+=begin vim yaml
 
     ---
     dsn: 'mysql:database=myapp;host=db.example.com'
     compile_templates: 1
+
+=end vim
 
 No problem!
 
@@ -118,6 +130,8 @@ when instantiating your application. You simply just pass the config
 variables to C<< MyApp->new(...) >>. Your PSGI script would then
 look like this:
 
+=begin vim perl
+
     use MyApp;
     use MyApp::Config;
     my $config = MyApp::Config->new;
@@ -127,14 +141,20 @@ look like this:
         compile_templates => $config->get('compile_templates'),
     )->to_app;
 
+=end vim
+
 Since you're probably going to end up adding many different options,
 you'll want that to have as little friction as possible. After all,
 that kind of code is a breeding ground for merge conflicts. Instead,
 just pass everything the config specifies into C<< MyApp->new >>.
 
+=begin vim perl
+
     MyApp->new(
         %{ $config->as_hash },
     );
+
+=end vim
 
 =head3 C<MyApp>
 
@@ -142,6 +162,8 @@ The final piece is making C<MyApp> accept and use these new constructor
 parameters. Since C<MyApp> uses L<Bread::Board::Declare> you can
 create services for each of these parameters with the familiar
 L<Moose/has> syntax.
+
+=begin vim perl
 
     has dsn => (
         is       => 'ro',
@@ -155,8 +177,12 @@ L<Moose/has> syntax.
         required => 1,
     );
 
+=end vim
+
 Finally, using the magic of L<Bread::Board> you can wire these new
 services into your existing C<database> and C<view> attributes.
+
+=begin vim perl
 
     has database => (
         is           => 'ro',
@@ -178,6 +204,8 @@ services into your existing C<database> and C<view> attributes.
         },
     );
 
+=end vim
+
 =head2 Developer-Specific Configuration
 
 One of the many benefits of using a system like L<Config::JFDI> is
@@ -187,8 +215,12 @@ which will be merged with the baseline config in C<config/myapp.dev.yml>.
 Say one of the developers runs their MySQL on a different machine. That
 developer can put this into a C<config/myapp.dev_local.yml>:
 
+=begin vim yaml
+
     ---
     dsn: 'mysql:database=myapp;host=arrakis.local'
+
+=end vim
 
 Now, when L<DBI> connects to the database on this developer's
 machine, it will get the correct C<dsn>. And it won't disrupt anyone

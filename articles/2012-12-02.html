@@ -17,10 +17,14 @@ Route builders are the part of OX which takes an action spec and determines
 which code to run when its associated path is matched. For instance, in this
 router:
 
+=begin vim perl
+
   router as {
       route '/'          => sub { "Hello world!" };
       route '/posts/:id' => 'posts.view';
   };
+
+=end vim
 
 C</> uses a route builder which just calls the given coderef directly, while
 C</posts/24> uses a route builder which generates a coderef to call the C<view>
@@ -34,7 +38,11 @@ There are three default route builders for OX applications:
 
 L<OX::RouteBuilder::Code>
 
+=begin vim perl
+
   route '/' => sub { "Hello world!" };
+
+=end vim
 
 This route builder will be used whenever the action spec is a coderef. It is
 the most basic route builder - it just allows you to specify a coderef to call
@@ -44,7 +52,11 @@ when the route is chosen.
 
 L<OX::RouteBuilder::ControllerAction>
 
+=begin vim perl
+
   route '/' => 'root.index';
+
+=end vim
 
 The ControllerAction route builder will be used if the action spec consists of
 two words (C<\w+>) separated by a period. Those two words will be used to look
@@ -54,16 +66,24 @@ services, but we will discuss that when we explain Bread::Board).
 
 The code which is run for the above example is roughly equivalent to:
 
+=begin vim perl
+
   sub {
       my $controller = $self->root;
       return $controller->index(@_);
   }
 
+=end vim
+
 =item *
 
 L<OX::RouteBuilder::HTTPMethod>
 
+=begin vim perl
+
   route '/' => 'root';
+
+=end vim
 
 The HTTPMethod route builder will be used if the action spec consists of a
 single word (C<\w+>). This word will be used to look up a controller as in the
@@ -74,6 +94,8 @@ instead. If that is also not found, the request will return a 405 error.
 
 The code which is run for the above example is roughly equivalent to:
 
+=begin vim perl
+
   sub {
       my ($r) = @_;
       my $controller = $self->root;
@@ -82,6 +104,8 @@ The code which is run for the above example is roughly equivalent to:
       return [405, [], ["error"]] if !$controller->can($method);
       return $controller->$method(@_);
   }
+
+=end vim
 
 =back
 
