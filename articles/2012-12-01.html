@@ -41,7 +41,9 @@ your application's URL structure.
       route '/' => sub { "Hello world!" };
   };
 
-This defines a simple "Hello world" application.
+This defines a simple "Hello world" application. This snippet is a valid
+C<.psgi> file (the format used by L<Plack>), since the C<router> keyword
+returns a PSGI application coderef if necessary.
 
 =for html
 If you download this example <a href="hello.psgi">here</a>, you can run it with
