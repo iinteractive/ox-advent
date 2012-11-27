@@ -1,0 +1,119 @@
+Title: Middleware
+Topic: OX
+Author: Jesse Luehrs <jesse.luehrs@iinteractive.com>
+
+=head1 Middleware
+
+Middleware are a concept from L<Plack> which allow you to intercept requests
+before they are seen by your application, and manipulate responses before they
+are sent back to the server. This can be used to add many different kinds of
+behavior to your application - for instance, redirecting users to a login page
+if they attempt to access the site without being logged in.
+
+At the most basic level, middleware are just subroutines which take a PSGI
+application as an argument, and return a new PSGI application. In this way, you
+can modify the PSGI environment before calling the underlying application,
+fiddle with the response that the application returns before sending it back to
+the server, or even do something else entirely.
+
+L<Plack::Middleware> is a class you can inherit from which helps in writing
+middleware. It allows you to write the middleware the same way that you would
+write a PSGI application, which will typically be more natural. Plack also
+comes with a wide variety of different pre-written middleware, which you can
+use in your application directly.
+
+=head1 The C<wrap> keyword
+
+Middleware can be added to your application via the C<wrap> keyword, which must
+be called inside a C<router> block. Middleware can be specified in one of three
+ways:
+
+=over 4
+
+=item *
+
+A coderef
+
+=begin vim perl
+
+  wrap sub {
+      my $app = shift;
+      return sub {
+          my $env = shift;
+          $env->{HTTP_X_POWERED_BY} = 'OX';
+          return $app->($env);
+      };
+  };
+
+=end vim
+
+This will call the given subroutine with the application as the first argument,
+and use the return value as the new application.
+
+=item *
+
+An instance of a Plack::Middleware subclass
+
+=begin vim perl
+
+  my $mw = Plack::Middleware::AccessLog->new(
+      format => 'combined',
+  );
+
+  wrap $mw;
+
+=end vim
+
+This will call the C<wrap> method on the object, and use the return value as
+the new application.
+
+=item *
+
+The name of a Plack::Middleware subclass
+
+=begin vim perl
+
+  wrap 'Plack::Middleware::Static' => (
+      root => 'static_root',
+      path => literal(qr{^/(?:images|js|css)/}),
+  );
+
+=end vim
+
+This will first instantiate a new instance of the middleware class, and then
+use that instance as described in the previous bullet point. The instance will
+be instantiated via L<Bread::Board>, so it can depend on services that your
+application has declared. The dependencies should be listed as a hash after the
+name of the class.
+
+=back
+
+The middleware will be applied in such an order that the first C<wrap>
+statement corresponds to the outermost middleware.
+
+=head2 C<wrap_if>
+
+Sometimes you don't want the middleware to be in effect for every request. For
+instance, you may have a middleware which redirects unregistered users to a
+login page, but this wouldn't work if this middleware was in effect for
+requests for the login page itself!
+
+C<wrap_if> allows you to conditionally apply middleware. It takes a coderef as
+an additional initial parameter, and the middleware will only be applied if
+that coderef returns a true value. For instance:
+
+=begin vim perl
+
+  wrap_if sub { $_[0]->{REMOTE_ADDR} eq '127.0.0.1' },
+      'Plack::Middleware::StackTrace' => (
+          force => literal(1),
+      );
+
+=end vim
+
+The condition subroutine will be called with the PSGI environment as the first
+argument, and should return true if the middleware should be applied. This
+example will only apply the L<StackTrace|Plack::Middleware::StackTrace>
+middleware if the request is coming from localhost.
+
+=cut
