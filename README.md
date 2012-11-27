@@ -31,13 +31,9 @@
   * differences in parameter handling
   * encodings
   * mappings
-* middleware (sartak)
+* middleware (doy)
   * wraps the application (just Plack middleware)
   * examples
-    * ErrorDocument
-    * Proxy
-    * Conditional / `wrap_if`
-    * domain-specific middleware including B:B usage
 * views
   * just normal classes, nothing special at all
   * can also be controllers themselves, to bypass the need for extra logic
