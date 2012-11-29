@@ -18,12 +18,12 @@
   * overview of Path::Router
   * route syntax
   * validations?
-* bread::board::declare (doy)
+* bread::board::declare (done)
   * overview of usage - attributes
 * middleware (done)
   * wraps the application (just Plack middleware)
   * examples
-* mounts
+* mounts (done)
   * includes an entirely separate PSGI application under a given path
   * also, inline mounts
 * views
