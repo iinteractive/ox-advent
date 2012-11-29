@@ -1,0 +1,82 @@
+Title: Mounts
+Topic: OX
+Author: Jesse Luehrs <jesse.luehrs@iinteractive.com>
+
+=head1 The C<mount> keyword
+
+The C<mount> keyword allows you to include other L<PSGI> applications inside
+your application, under a given request path. For instance, if you have static
+files that need to be served, you can create a L<Plack::App::File> instance and
+mount it under C</static>, so that any request for a path underneath C</static>
+will be delegated to the Plack::App::File app.
+
+You can specify an app in one of four ways:
+
+=over 4
+
+=item *
+
+A PSGI coderef
+
+=begin vim perl
+
+  mount '/static' => Plack::App::File->new(root => "static")->to_app;
+
+=end vim
+
+In this case, the coderef is delegated to directly.
+
+=item *
+
+An object
+
+=begin vim perl
+
+  mount '/static' => Plack::App::File->new(root => "static");
+
+=end vim
+
+The object will have C<to_app> called on it, and the result of that will be
+used for the mount.
+
+=item *
+
+The name of a class
+
+=begin vim perl
+
+  mount '/static' => "Plack::App::File", (
+      root     => 'static_root',
+      encoding => literal('latin1'),
+  );
+
+=end vim
+
+This will first instantiate a new instance of the class, and then use that
+instance as described in the previous bullet point. The instance will be
+instantiated via Bread::Board, so it can depend on services that your
+application has declared. The dependencies should be listed as a hash after the
+name of the class.
+
+=item *
+
+Another router
+
+=begin vim perl
+
+  mount '/auth' => router as {
+      route '/login' => 'auth.login';
+      # ...
+  };
+
+=end vim
+
+This will allow you to create separate sections of your application under
+certain request paths. These will be able to define all of their own
+middleware, routes, and mounts, but will share the attributes defined in the
+main app. In this example, a request for C</auth/login> will be handled by the
+C<auth.login> action.
+
+=back
+
+=cut
