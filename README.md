@@ -29,12 +29,12 @@
 * views
   * just normal classes, nothing special at all
   * can also be controllers themselves, to bypass the need for extra logic
-* ox::request
+* ox::request (done)
   * mostly modeled after Plack::Request
   * differences in parameter handling
   * encodings
   * mappings
-* `uri_for`
+* `uri_for` (done)
   * reverse of routing
   * defaults and validations
 * HTTP::Throwable
@@ -46,11 +46,11 @@
   * ???
 * roles and inheritance
   * examples
-* bread::board (underlying structure) (doy)
-* additional bread::board features
+* additional bread::board features (doy)
   * subcontainers
   * type inference
   * lifecycles
+* bread::board (underlying structure) (doy)
 * without the sugar (doy)
 * custom routebuilders (doy)
 * external routers (doy)
