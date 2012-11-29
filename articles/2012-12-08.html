@@ -1,0 +1,164 @@
+Title: OX::Request and OX::Response
+Topic: OX
+Author: Jesse Luehrs <jesse.luehrs@iinteractive.com>
+
+=head1 OX::Request
+
+As mentioned previously, action subroutines and methods receive an
+L<OX::Request> instance containing the request data as their first argument.
+OX::Request provides access to all of the request data that the application
+received for the current request.
+
+=head2 Basic request data
+
+The OX::Request instance provides methods to access all of the various parts of
+the request. Some commonly used methods include:
+
+=over 4
+
+=item *
+
+C<< $r->path >>
+
+Returns the request path.
+
+=item *
+
+C<< $r->method >>
+
+Returns the HTTP method (GET, POST, etc) that was used for the request.
+
+=item *
+
+C<< $r->headers >>
+
+Returns an L<HTTP::Headers> object containing the headers in the request.
+
+=item *
+
+C<< $r->param($name) >>, C<< $r->parameters >>
+
+Allows access to the request parameters, either from the the query string or
+from the request body. The C<param> method returns the value for a single
+parameter, while the C<parameters> method returns a hashref of all parameters
+given.
+
+=item *
+
+C<< $r->uploads >>
+
+Returns a hashref of upload objects, which can be used to access uploaded
+files.
+
+=back
+
+OX::Request is a subclass of L<Web::Request>, so you can find more details in
+its documentation.
+
+=head2 Encoding
+
+By default, OX decodes all request data as UTF-8 before passing it to the
+application, and encodes all response data as UTF-8 before sending it back to
+the server. If you need to handle different encodings, you can adjust the
+request object to handle things however you want. The C<encoding> method will
+allow you to set whatever encoding you want (anything supported by L<Encode>,
+or C<undef> to do no encoding at all). For instance:
+
+=begin vim perl
+
+  sub index {
+      my $self = shift;
+      my ($r) = @_;
+      $r->encoding('latin1');
+      my $page = $r->param('page');
+      # ...
+  }
+
+=end vim
+
+This will set C<$page> to the value of the C<page> parameter, assuming that the
+request encoded the C<page> parameter using the latin1 encoding.
+
+The C<encoding> value is also used to encode the response. By default, all
+responses will be encoded as UTF-8, but if you need to return something like a
+binary file, you can do this:
+
+=begin vim perl
+
+  sub index {
+      my $self = shift;
+      my ($r) = @_;
+      # ...
+      $r->encoding(undef);
+      return [
+          200,
+          [ 'Content-Type' => 'application/pdf' ],
+          [ $pdf_contents ],
+      ];
+  }
+
+=end vim
+
+This ensures that the binary data in the file will not be corrupted by trying
+to encode it as UTF-8 before returning it.
+
+=head2 Routing details
+
+You can also access the route description for the matched route via the
+C<< $r->mapping >> method. This will return a hashref containing all of the
+path variables. In addition, this hashref may contain additional data, either
+added by the route builder or specified in the route description itself. For
+instance, the ControllerAction route builder adds keys for C<controller> and
+C<action>, and the HTTPMethod route builder adds a C<controller> key.
+
+You can specify additional elements to add to the mapping hashref in your route
+descriptions by specifying them in the hash along with your variable
+validations - values specified in this way are called I<defaults>. For
+instance:
+
+=begin vim perl
+
+  route '/admin/import/:company' => 'admin.import', (
+      company => { isa => 'Int' },
+      section => 'admin',
+  );
+
+=end vim
+
+In this case, the mapping hashref will also contain a key for C<section> with
+the value C<admin>.
+
+=head1 OX::Response
+
+If you need to return more complicated responses (with headers, cookies, and
+things like that), you can use OX::Response to make this process easier. You
+can create an OX::Response object by calling the C<new_response> method on the
+request object, and then setting the various values via methods on the response
+object. For instance:
+
+=begin vim perl
+
+  my $res = $r->new_response;
+  $res->status(200);
+  $res->content_type('text/csv');
+  $res->content("foo,bar\nbaz,quux\n");
+  return $res;
+
+=end vim
+
+C<new_response> can also take key/value pairs to populate initial values for
+C<status>, C<headers>, C<content>, etc, or it can also take a valid (possibly
+partial) PSGI response to set some initial values:
+
+=begin vim perl
+
+  my $res = $r->new_response([200, ["X-My-App" => "MyApp"]]);
+  $res->content_type('text/csv');
+  $res->content("foo,bar\nbaz,quux\n");
+  return $res;
+
+=end vim
+
+See L<Web::Response> for more details about the full functionality available.
+
+=cut
