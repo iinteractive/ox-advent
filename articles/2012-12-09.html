@@ -1,0 +1,70 @@
+Title: uri_for
+Topic: OX
+Author: Jesse Luehrs <jesse.luehrs@iinteractive.com>
+
+=head1 Paths and actions
+
+Different pages of your application need to be able to reference each other,
+and doing this by hardcoding URL paths is fairly fragile. URLs are the external
+API to your application, and may need to change for all kinds of different
+reasons, including things like SEO and general aesthetics which are frequently
+dictated by the client. Tying any part of your application's functionality to
+URL paths themselves is a good way to make the application hard to modify as
+time goes on.
+
+What we need is a way to refer to application endpoints using an internal
+identifier instead of an external one. Luckily, we already have one. Yesterday
+we saw how you could access the mapping for the current route via
+C<< $r->mapping >>. The inverse operation to C<< $r->mapping >> is
+C<< $r->uri_for >>. C<uri_for> takes a mapping hashref and returns the URI path
+corresponding to that mapping.
+
+For instance, given these routes:
+
+=begin vim perl
+
+  route '/'               => 'root.index';
+  route '/view/:id'       => 'root.view';
+  route '/admin/view/:id' => 'root.view', (
+      section => 'admin',
+  );
+
+=end vim
+
+In this case, C<< $r->uri_for({ controller => 'root', action => 'index' }) >>
+will return C<"/">,
+C<< $r->uri_for({ controller => 'root', action => 'view', id => 123 }) >> will
+return C<"/view/123">, and
+C<< $r->uri_for({ controller => 'root', action => 'view', id => 123, section => 'admin' }) >>
+will return C<"/admin/view/123">.
+
+Additionally, you only have to specify enough of the mapping to make it unique.
+For instance, if the three routes listed above were the only routes in the
+application, C<< $r->uri_for({ section => 'admin', id => 123 }) >> would also
+be sufficient to return C<"/admin/view/123">.
+
+=head2 The C<name> entry
+
+This can still be a bit verbose though, so there is a shorthand to make the
+common case easier. If you pass in just a single string to C<uri_for>, it will
+be treated as though you passed a mapping with that string as the C<name>
+value. This allows you to give the various routes in your application unique
+(and meaningful) names, and access them easily. If you say:
+
+=begin vim perl
+
+  route '/' => 'root.index';
+  route '/about' => 'root.about', (
+      name => 'about',
+  );
+
+=end vim
+
+then you can use C<< $r->uri_for('about') >> to access the C<"/about"> page.
+
+In addition, the ControllerAction and HTTPMethod route builders also by default
+set the C<name> value to be the action spec. This means that in the previous
+example, C<< $r->uri_for('root.index') >> can also be used to access the C<"/">
+path.
+
+=cut
