@@ -126,6 +126,48 @@ for the service will be created by calling
 C<< MyApp::Controller->new(model => $model) >> (where C<$model> is the value
 retrieved from the C<model> service).
 
+=head1 Dependencies
+
+I<Dependencies> are how services know which other services are required in
+order to generate their value. The simplest way to specify dependencies is with
+an arrayref of service names (as above). If you need to use a different name
+for a service, however, you'll need to specify the dependencies via a hashref:
+
+=begin vim perl
+
+  has view => (
+      is           => 'ro',
+      isa          => 'Template',
+      dependencies => {
+          INCLUDE_PATH => 'template_root',
+      },
+  );
+
+=end vim
+
+This will create a L<Template> object by calling
+C<< Template->new(INCLUDE_PATH => $template_root) >>, where C<$template_root>
+is created from the C<template_root> service.
+
+If you want to create a service with a hardcoded value for one of its
+constructor parameters, you can use the C<literal> helper keyword:
+
+=begin vim perl
+
+  has view => (
+      is           => 'ro',
+      isa          => 'Template',
+      dependencies => {
+          INCLUDE_PATH => 'template_root',
+          TAG_STYLE    => literal('php'),
+      },
+  );
+
+=end vim
+
+This will do the same thing as above, except that it will call
+C<< Template->new(INCLUDE_PATH => $template_root, TAG_STYLE => 'php') >>.
+
 =head1 Resolving services
 
 Requesting the value from a service is called I<resolving> the service. OX will
