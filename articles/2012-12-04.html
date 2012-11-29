@@ -1,0 +1,153 @@
+Title: Bread::Board
+Topic: OX
+Author: Jesse Luehrs <jesse.luehrs@iinteractive.com>
+
+=head1 Dependency Injection
+
+One thing that you may have noticed in the article about actions is that
+actions only receive the request object. There is no global application
+context, or stash, or anything like that, like you may be used to in other
+frameworks. This is by design - global state in general is bad for
+maintainability.
+
+This does present a problem, however - how do you access things like your model
+objects, if action methods aren't passed anything which can access them? The
+answer is pretty straightforward: if your controller is going to use a model
+object, that object should be an attribute. This limits the scope of your
+helper objects to only the places you expect them to actually be used (which
+helps in debugging, and reliability in general), without making them any more
+difficult to access.
+
+The mechanism which allows this to happen is called I<dependency injection>.
+Dependency injection is a pattern in which you specify the relationships
+between your objects (which objects are necessary for each objects'
+construction), and a framework determines how to create the objects on demand
+such that all of the dependencies are met. The framework that OX uses is called
+L<Bread::Board>, via the L<Bread::Board::Declare> sugar layer.
+
+=head1 Defining services
+
+Describing your application is done by creating I<services> for each type of
+object your application will need. In OX (because OX uses
+Bread::Board::Declare), this is as simple as creating attributes on your
+application class, just like you would in any other project. The difference is
+that in the attribute definition, you must define how the value for that
+attribute should be created, and which other attributes the creation process
+needs. Here is an example of an OX class with a few attribute defintions:
+
+=begin vim perl
+
+  package MyApp;
+  use OX;
+
+  has dsn => (
+      is    => 'ro',
+      isa   => 'Str',
+      value => 'dbi:mysql:myapp',
+  );
+
+  has model => (
+      is           => 'ro',
+      isa          => 'MyApp::Model',
+      dependencies => ['dsn'],
+      block        => sub {
+          my $s = shift;
+          return MyApp::Model->connect($s->param('dsn'));
+      },
+  );
+
+  has controller => (
+      is           => 'ro',
+      isa          => 'MyApp::Controller',
+      dependencies => ['model'],
+  );
+
+  router as {
+      # ...
+  };
+
+=end vim
+
+This is very similar to the way you would write the class normally, except that
+you use the C<value> or C<block> options instead of C<default> or C<builder>,
+and if your attribute holds an object with a constructor that takes key/value
+pairs (like Moose objects do by default), you don't have to specify anything at
+all (Bread::Board will figure out how to create the object on its own).
+
+=begin vim perl
+
+  has dsn => (
+      is    => 'ro',
+      isa   => 'Str',
+      value => 'dbi:mysql:myapp',
+  );
+
+=end vim
+
+If you specify C<value>, requesting the service will return the given value
+directly. Here, requesting the C<dsn> service will return C<"dbi:mysql:myapp">
+unless another value has been provided for this attribute.
+
+=begin vim perl
+
+  has model => (
+      is           => 'ro',
+      isa          => 'MyApp::Model',
+      dependencies => ['dsn'],
+      block        => sub {
+          my $s = shift;
+          return MyApp::Model->connect($s->param('dsn'));
+      },
+  );
+
+=end vim
+
+If you specify C<block>, Bread::Board will get the value associated with each
+dependency listed, and call the block with an argument of an object which lets
+you retrieve the value of each dependency via its C<param> method. Here,
+requesting the C<model> service will first get the value from the C<dsn>
+service, and then call the given sub. Calling C<< $s->param('dsn') >> inside
+that sub will return the value for the C<dsn> service.
+
+=begin vim perl
+
+  has controller => (
+      is           => 'ro',
+      isa          => 'MyApp::Controller',
+      dependencies => ['model'],
+  );
+
+=end vim
+
+If you specify neither of those, but the type constraint corresponds to a
+class, Bread::Board will get the value associated with each dependency listed
+and pass them as parameters to the constructor. For instance, here the value
+for the service will be created by calling
+C<< MyApp::Controller->new(model => $model) >> (where C<$model> is the value
+retrieved from the C<model> service).
+
+=head1 Resolving services
+
+Requesting the value from a service is called I<resolving> the service. OX will
+resolve the appropriate controller service automatically whenever a request
+comes in which matches a route that specifies a controller. This will ensure
+that all of the attributes in the controller are populated properly based on
+the specified dependencies.
+
+If you want to get the values out of your application class separately, you can
+just call the accessor for the attribute. If the attribute doesn't have a value
+stored in it, this will create a new instance of the value held by the service
+and return it (otherwise, it will work like a normal attribute). Other ways to
+interact with services will be described in a future article.
+
+=head1 Further reading
+
+This article has been just a very high level overview of how to create OX
+applications that use additional classes. We will be going deeper into detail
+about how to use Bread::Board features more effectively with OX in future
+articles, but if you're interested in learning more about it, the documentation
+for L<Bread::Board> (especially the L<Bread::Board::Manual>) and
+L<Bread::Board::Declare> are useful resources, as is
+L<this talk|http://youtu.be/DhhaOQWoOpw> from YAPC::NA 2012.
+
+=cut
