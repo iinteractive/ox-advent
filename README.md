@@ -20,9 +20,6 @@
   * validations?
 * bread::board::declare (doy)
   * overview of usage - attributes
-* dependencies (doy)
-  * explicit dependencies
-  * infer => 1
 * middleware (done)
   * wraps the application (just Plack middleware)
   * examples
@@ -50,6 +47,10 @@
 * roles and inheritance
   * examples
 * bread::board (underlying structure) (doy)
+* additional bread::board features
+  * subcontainers
+  * type inference
+  * lifecycles
 * without the sugar (doy)
 * custom routebuilders (doy)
 * external routers (doy)
