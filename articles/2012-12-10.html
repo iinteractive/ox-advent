@@ -1,0 +1,94 @@
+Title: Exceptions
+Topic: OX
+Author: Jesse Luehrs <jesse.luehrs@iinteractive.com>
+
+=head1 Exception handling
+
+OX applications are implicitly wrapped in the
+L<Plack::Middleware::HTTPExceptions> middleware. This allows you to throw
+exception objects which implement various methods describing an HTTP error or
+redirect response, and have that exception object translated into a real PSGI
+response.
+
+Your exception objects can either implement the C<as_psgi> method (which will
+return a value to be used directly), or they can implement a C<code> method
+(and optionally C<as_string> and C<location>), and a response will be built
+from calling those methods. Two common CPAN modules which implement a
+compatible interface are L<HTTP::Exception> and L<HTTP::Throwable>. Since
+HTTP::Throwable is more flexible and extensible (being built via a set of
+reusable Moose roles), it is generally recommended for this purpose.
+
+=head1 HTTP::Throwable
+
+HTTP::Throwable implements a set of exception classes for HTTP redirect and
+error codes (3xx, 4xx, 5xx). HTTP::Throwable itself is a role which provides
+functionality common to all of the classes, but you typically interact with it
+via L<HTTP::Throwable::Factory>, which provides shortcuts for creating and
+throwing HTTP::Throwable objects. For instance:
+
+=begin vim perl
+
+  use HTTP::Throwable::Factory 'http_throw';
+
+  sub index {
+      my $self = shift;
+      my ($r) = @_;
+
+      http_throw(MethodNotAllowed => { allow => [ qw(GET) ] })
+          unless $r->method eq 'GET';
+
+      http_throw(Found => { location => $r->uri_for('login') })
+          unless exists $r->session->{user_id};
+
+      # ...
+  }
+
+=end vim
+
+http_throw takes the name of an exception type and an optional hashref of
+parameters for the exception class's constructor. The exception class used will
+consume the role C<HTTP::Throwable::Role::Status::$type>, so you can find the
+documentation for specific HTTP statuses in the documentation for the
+individual status roles. If you just want to create the exception object to
+throw later, you can use the C<http_exception> function instead, which works
+identically except that the exception object is returned instead of thrown.
+
+=head1 Caveats
+
+While using exceptions in this way can save a lot of code (you don't have to
+worry about missing an input failing to pass validation, for instance), there
+are also a few things to keep in mind.
+
+=over 4
+
+=item *
+
+Exceptions for exceptional conditions
+
+Plack::Middleware::HTTPExceptions and HTTP::Throwable only support 3xx, 4xx,
+and 5xx HTTP status codes. This is intentional, because using exceptions as a
+generic flow control mechanism is bad practice, and tends to make your code
+more difficult to follow. Exceptions should be used for exceptional conditions,
+such as validation or authorization failures. Real responses to requests in
+your application should use a normal code flow.
+
+=item *
+
+Middleware
+
+OX's automatic use of Plack::Middleware::Exceptions happens at the innermost
+layer, which means that exceptions thrown from middleware will not be handled.
+This is because skipping over middleware stack frames via exceptions can lead
+to very confusing bugs. Middleware are typically written to expect to be able
+to run code after a request returns, and exceptions defeat this.
+
+For instance, take the example of L<Plack::Middleware::Session>. It needs to be
+able to save the session data back to the session store when the request ends
+so that it will be there for next time. If you modify the session data but then
+end the request via C<http_throw>, that exception needs to be caught before the
+exception unwinds the Plack::Middleware::Session stack frame, or else the
+modified session data will not be saved.
+
+=back
+
+=cut
