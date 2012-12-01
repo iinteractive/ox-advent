@@ -26,7 +26,7 @@
 * mounts (done)
   * includes an entirely separate PSGI application under a given path
   * also, inline mounts
-* views
+* views (sartak)
   * just normal classes, nothing special at all
   * can also be controllers themselves, to bypass the need for extra logic
 * ox::request (done)
