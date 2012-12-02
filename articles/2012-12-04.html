@@ -18,12 +18,12 @@ helper objects to only the places you expect them to actually be used (which
 helps in debugging, and reliability in general), without making them any more
 difficult to access.
 
-The mechanism which allows this to happen is called I<dependency injection>.
-Dependency injection is a pattern in which you specify the relationships
-between your objects (which objects are necessary for each objects'
-construction), and a framework determines how to create the objects on demand
-such that all of the dependencies are met. The framework that OX uses is called
-L<Bread::Board>, via the L<Bread::Board::Declare> sugar layer.
+The mechanism which powers this is called I<dependency injection>. Dependency
+injection is a pattern in which you specify the relationships between your
+objects (which objects are necessary for each objects' construction), and a
+framework determines how to create the objects on demand such that all of the
+dependencies are met. The framework that OX uses is called L<Bread::Board>, via
+the L<Bread::Board::Declare> sugar layer.
 
 =head1 Defining services
 
@@ -84,9 +84,10 @@ all (Bread::Board will figure out how to create the object on its own).
 
 =end vim
 
-If you specify C<value>, requesting the service will return the given value
-directly. Here, requesting the C<dsn> service will return C<"dbi:mysql:myapp">
-unless another value has been provided for this attribute.
+If the attribute specifies C<value>, then requesting the service will return
+that given value directly. Here, requesting the C<dsn> service will return the
+string C<"dbi:mysql:myapp"> unless another value has been provided for this
+attribute, such as from a constructor parameter.
 
 =begin vim perl
 
@@ -102,12 +103,14 @@ unless another value has been provided for this attribute.
 
 =end vim
 
-If you specify C<block>, Bread::Board will get the value associated with each
-dependency listed, and call the block with an argument of an object which lets
-you retrieve the value of each dependency via its C<param> method. Here,
-requesting the C<model> service will first get the value from the C<dsn>
-service, and then call the given sub. Calling C<< $s->param('dsn') >> inside
-that sub will return the value for the C<dsn> service.
+If you specify C<block>, Bread::Board will first initialize all of the
+dependencies. Then, it will call the subroutine provided in C<block>. That
+subroutine receives one argument, an object which contains the value of each
+dependency. The dependency values can be accessed via the C<param> method on
+that object. Here, requesting the C<model> service will first get the value
+from the C<dsn> service, and then call the given sub. Calling
+C<< $s->param('dsn') >> inside that sub will return the value for the C<dsn>
+service.
 
 =begin vim perl
 
@@ -149,8 +152,9 @@ This will create a L<Template> object by calling
 C<< Template->new(INCLUDE_PATH => $template_root) >>, where C<$template_root>
 is created from the C<template_root> service.
 
-If you want to create a service with a hardcoded value for one of its
-constructor parameters, you can use the C<literal> helper keyword:
+Sometimes you don't necessarily want to create trivial services for constant
+values. If you want to create a service with an inline, hardcoded value for one
+of its constructor parameters, you can use the C<literal> helper keyword:
 
 =begin vim perl
 
@@ -170,11 +174,15 @@ C<< Template->new(INCLUDE_PATH => $template_root, TAG_STYLE => 'php') >>.
 
 =head1 Resolving services
 
-Requesting the value from a service is called I<resolving> the service. OX will
-resolve the appropriate controller service automatically whenever a request
-comes in which matches a route that specifies a controller. This will ensure
-that all of the attributes in the controller are populated properly based on
-the specified dependencies.
+Requesting the value from a service is called I<resolving> the service. Recall
+from the article on route builders that there are many ways to specify which
+code executes when a route matches. For instance, you can specify an action
+like C<"profile.edit">. To dispatch this action, OX first resolves the
+C<profile> service, which by convention we also call the C<profile>
+I<controller> since it is a kind of dispatch target. OX then calls the C<edit>
+method (called the C<edit> I<action>) on the C<profile> controller. Thanks to
+Bread::Board, your C<profile> controller will be fully initialized with all of
+its specified dependencies, so that OX can satisfy the user's web request.
 
 If you want to get the values out of your application class separately, you can
 just call the accessor for the attribute. If the attribute doesn't have a value

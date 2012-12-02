@@ -24,7 +24,9 @@ use in your application directly.
 
 =head1 The C<wrap> keyword
 
-The C<wrap> keyword is how you add middleware to your OX application. C<wrap> must be called inside a C<router> block. Middleware can be specified in one of three ways:
+The C<wrap> keyword is how you add middleware to your OX application. C<wrap>
+must be called inside a C<router> block, and is quite similar to the C<enable>
+keyword in L<Plack::Builder>. Middleware can be specified in one of three ways:
 
 =over 4
 
@@ -38,8 +40,11 @@ A coderef
       my $app = shift;
       return sub {
           my $env = shift;
-          $env->{HTTP_X_POWERED_BY} = 'OX';
-          return $app->($env);
+          my $res = $app->($env);
+          push @{ $res->[1] }, (
+              'X-Powered-By' => "OX $OX::VERSION",
+          );
+          return $res;
       };
   };
 
@@ -98,7 +103,8 @@ requests for the login page itself!
 
 C<wrap_if> allows you to conditionally apply middleware. It takes a coderef as
 an additional initial parameter, and the middleware will only be applied if
-that coderef returns a true value. For instance:
+that coderef returns a true value. It is similar to the C<enable_if> keyword in
+L<Plack::Builder>. For instance:
 
 =begin vim perl
 
@@ -113,5 +119,46 @@ The condition subroutine will be called with the PSGI environment as the first
 argument, and should return true if the middleware should be applied. This
 example will only apply the L<StackTrace|Plack::Middleware::StackTrace>
 middleware if the request is coming from localhost.
+
+=head1 Example
+
+Here is a more complete example of using C<wrap> and C<wrap_if>. This
+application enables the L<StackTrace|Plack::Middleware::StackTrace> middleware
+for requests coming from localhost (to make debugging easier), and serves
+static files from the application via the L<Static|Plack::Middleware::Static>
+middleware.
+
+=begin vim perl
+
+  package MyApp;
+  use OX;
+
+  has static_root => (
+      is    => 'ro',
+      isa   => 'Str',
+      value => 'root/static/',
+  );
+
+  has profile => (
+      is  => 'ro',
+      isa => 'MyApp::Controller::Profile',
+  );
+
+  router as {
+      wrap_if sub { $_[0]->{REMOTE_ADDR} eq '127.0.0.1' },
+          'Plack::Middleware::StackTrace' => (
+              force => literal(1),
+          );
+
+      wrap 'Plack::Middleware::Static' => (
+          root => 'static_root',
+          path => literal(qr{^/(?:images|js|css)/}),
+      );
+
+      route '/profile'       => 'profile.self';
+      route '/profile/:user' => 'profile.view';
+  };
+
+=end vim
 
 =cut

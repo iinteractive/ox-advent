@@ -11,9 +11,9 @@ redirect response, and have that exception object translated into a real PSGI
 response.
 
 Your exception objects can either implement the C<as_psgi> method (which will
-return a value to be used directly), or they can implement a C<code> method
-(and optionally C<as_string> and C<location>), and a response will be built
-from calling those methods. Two common CPAN modules which implement a
+return a PSGI response to be used directly), or they can implement a C<code>
+method (and optionally C<as_string> and C<location>), and a response will be
+built from calling those methods. Two common CPAN modules which implement a
 compatible interface are L<HTTP::Exception> and L<HTTP::Throwable>. Since
 HTTP::Throwable is more flexible and extensible (being built via a set of
 reusable Moose roles), it is generally recommended for this purpose.

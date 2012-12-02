@@ -7,7 +7,10 @@ Author: Jesse Luehrs <jesse.luehrs@iinteractive.com>
 As mentioned previously, action subroutines and methods receive an
 L<OX::Request> instance containing the request data as their first argument.
 OX::Request provides access to all of the request data that the application
-received for the current request.
+received for the current request. Everything from the PSGI environment is
+available in a nicely packaged object, as well as details of how OX matched the
+request against your router. There are even shortcuts to build OX::Response
+objects for your convenience.
 
 =head2 Basic request data
 
@@ -59,10 +62,12 @@ its documentation.
 
 By default, OX decodes all request data as UTF-8 before passing it to the
 application, and encodes all response data as UTF-8 before sending it back to
-the server. If you need to handle different encodings, you can adjust the
-request object to handle things however you want. The C<encoding> method will
-allow you to set whatever encoding you want (anything supported by L<Encode>,
-or C<undef> to do no encoding at all). For instance:
+the server. This is almost certainly what you should be doing in any new
+applications - UTF-8 is used by over half of all websites. If you need to
+handle different encodings, however, you can adjust the request object to
+handle things however you want. The C<encoding> method will allow you to set
+any encoding supported by L<Encode>, or C<undef> to do no encoding at all. For
+instance:
 
 =begin vim perl
 
@@ -118,29 +123,39 @@ instance:
 
 =begin vim perl
 
-  route '/admin/import/:company' => 'admin.import', (
-      company => { isa => 'Int' },
-      section => 'admin',
+  route '/news.xml' => 'feeds.news', (
+      formatter => 'Data::Feed::RSS',
+  );
+
+  route '/news.atom' => 'feeds.news', (
+      formatter => 'Data::Feed::Atom',
   );
 
 =end vim
 
-In this case, the mapping hashref will also contain a key for C<section> with
-the value C<admin>.
+In this case, the mapping hashref will contain a key for C<formatter> which
+contains the name of the formatter class to use. The C<news> action can then
+use this value to determine how to format the response, rather than having to
+guess by inspecting the request path.
 
 =head1 OX::Response
 
 If you need to return more complicated responses (with headers, cookies, and
-things like that), you can use OX::Response to make this process easier. You
-can create an OX::Response object by calling the C<new_response> method on the
-request object, and then setting the various values via methods on the response
-object. For instance:
+things like that), you can use L<OX::Response> (a subclass of L<Web::Response>)
+to make this process easier. You can create an OX::Response object by calling
+the C<new_response> method on the request object, and then setting the various
+values via methods on the response object. For instance:
 
 =begin vim perl
 
   my $res = $r->new_response;
   $res->status(200);
-  $res->content_type('text/csv');
+  if ($is_internet_explorer) {
+      $res->content_type('application/vnd.ms-excel');
+  }
+  else {
+      $res->content_type('text/csv');
+  }
   $res->content("foo,bar\nbaz,quux\n");
   return $res;
 
@@ -153,7 +168,12 @@ partial) PSGI response to set some initial values:
 =begin vim perl
 
   my $res = $r->new_response([200, ["X-My-App" => "MyApp"]]);
-  $res->content_type('text/csv');
+  if ($is_internet_explorer) {
+      $res->content_type('application/vnd.ms-excel');
+  }
+  else {
+      $res->content_type('text/csv');
+  }
   $res->content("foo,bar\nbaz,quux\n");
   return $res;
 
