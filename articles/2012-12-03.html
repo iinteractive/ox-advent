@@ -100,7 +100,7 @@ variables. For instance:
           id => { isa => 'Int' },
       );
       route '/view/:search' => 'posts.search', (
-          id => { isa => qr/^\w/ },
+          search => { isa => qr/^\D+$/ },
       );
   };
 
