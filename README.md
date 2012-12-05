@@ -26,9 +26,9 @@
 * mounts (done)
   * includes an entirely separate PSGI application under a given path
   * also, inline mounts
-* views (sartak)
-  * just normal classes, nothing special at all
-  * can also be controllers themselves, to bypass the need for extra logic
+* psgi (done)
+  * requests
+  * responses
 * ox::request (done)
   * mostly modeled after Plack::Request
   * differences in parameter handling
@@ -37,23 +37,24 @@
 * `uri_for` (done)
   * reverse of routing
   * defaults and validations
-* HTTP::Throwable
+* HTTP::Throwable (done)
   * HTTPExceptions middleware is applied by default, so this just works
   * examples
-* psgi
+* plack and deployment
   * how to write a .psgi file for your app (and what belongs in it)
-  * deployment?
-  * ???
-* roles and inheritance
+* roles and inheritance (done)
   * examples
+* views (sartak)
+  * just normal classes, nothing special at all
+  * can also be controllers themselves, to bypass the need for extra logic
+* custom routebuilders (doy)
 * additional bread::board features (doy)
   * subcontainers
   * type inference
   * lifecycles
-* bread::board (underlying structure) (doy)
 * without the sugar (doy)
-* custom routebuilders (doy)
-* external routers (doy)
+  * `build_app`, `build_router`, etc
+  * bread::board (underlying structure)
 * roles as plugins
 * example of authentication against a model (using middleware, not using middleware) -- or just translate http://www.catalystframework.org/calendar/2011/15 || http://www.catalystframework.org/calendar/2007/5 || http://www.catalystframework.org/calendar/2007/6
 * extend authentication example into authorization
