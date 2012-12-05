@@ -1,0 +1,141 @@
+Title: Deployment
+Topic: OX
+Author: Jesse Luehrs <jesse.luehrs@iinteractive.com>
+
+=head1 Plack
+
+OX interacts with web servers entirely via PSGI. This means that you can use
+any of the tools provided by L<Plack> to manage and deploy your OX
+applications. Plack provides functionality to run your app on many different
+application servers, tools to manage your application during development and
+deployment, and several middleware classes to fix deployment issues in various
+situations.
+
+=head2 C<app.psgi> and C<plackup>
+
+Plack's tools typically interact with applications via C<.psgi> files. This is
+a file which, when evaluated, returns a PSGI application coderef. As mentioned
+previously, an OX application as typically written is a valid C<.psgi> file:
+
+=begin vim perl
+
+  # app.psgi
+  use OX;
+
+  router as {
+      route '/' => sub { "Hello world!" };
+  };
+
+=end vim
+
+but this quickly becomes unwieldy. Splitting your application into multiple
+packages and files is important not only for code organization, but also
+because having a split between code that is inherent to your application and
+code that is specific to deployment makes the deployment process much easier.
+For instance, if your application uses sessions, the
+L<Session|Plack::Middleware::Session> middleware is conceptually part of the
+application itself - running the application without that middleware applied
+doesn't make a lot of sense. On the other hand, the
+L<ReverseProxy|Plack::Middleware::ReverseProxy> middleware is dependent on your
+deployment environment - declaring that in your application doesn't make sense
+because you might run your same application in several different environments,
+only some of which use a reverse proxy.
+
+The typical way that OX applications are written is to write them as a class:
+
+=begin vim perl
+
+  # Hello.pm
+  package Hello;
+  use OX;
+
+  router as {
+      route '/' => sub { "Hello world!" };
+  };
+
+  1;
+
+=end vim
+
+and then write an C<app.psgi> file which instantiates the application:
+
+=begin vim perl
+
+  # app.psgi
+  use Hello;
+  Hello->new->to_app;
+
+=end vim
+
+This way, you can easily add additional deployment-specific code to just the
+C<app.psgi> file, to do whatever you need to do:
+
+=begin vim perl
+
+  # app.psgi
+  use Hello;
+  use Plack::Middleware::ReverseProxy;
+
+  my $app = Hello->new->to_app;
+  $app = Plack::Middleware::ReverseProxy->wrap($app);
+
+  $app;
+
+=end vim
+
+L<Plack::Builder> can also be helpful for this.
+
+=head1 Servers
+
+Now that we have an C<app.psgi> file, we can run the application in any
+application server supported by L<Plack::Loader>. By default, if you just run
+C<plackup>, it will run your application using L<HTTP::Server::PSGI>. This is a
+simple, single-process server which can be used during development. For your
+actual deployment, however, you'll likely want to use a more fully-featured
+server.
+
+By passing the C<-s> option to C<plackup>, you can use any application server
+which has a corresponding L<Plack::Handler> class. L<Starman> is a good example
+of a production-ready application server. It is fast, preforking, and supports
+all of HTTP/1.1. A typical Starman deployment involves running your application
+with starman as a normal user on a port that isn't exposed to the public, and
+then running a reverse proxy of some sort in front of it. This ensures that you
+don't need to run your application itself as root, and also prevents attacks
+like L<Slowloris|http://en.wikipedia.org/wiki/Slowloris>, which Starman on its
+own would otherwise be vulnerable to.
+
+To run Starman, you can pass C<-s Starman> to your C<plackup> invocation, or
+you can use the C<starman> runner script instead (which has more configuration
+options available). You should also add the ReverseProxy middleware to your
+C<app.psgi> file (to ensure that your application sees the correct values for
+the C<host>). For the reverse proxy itself, something like
+L<nginx|http://www.nginx.org/> works well, using a configuration like this:
+
+  server {
+      listen 80;
+      server_name myapp.example.com;
+
+      location / {
+          proxy_set_header Host               $http_host;
+          proxy_set_header X-Forwarded-Host   $http_host;
+          proxy_set_header X-Real-IP          $remote_addr;
+          proxy_set_header X-Forwarded-For    $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Port   80;
+
+          proxy_pass http://localhost:5000/;
+      }
+  }
+
+You should adjust the port in the proxy_pass statement to point to the port
+that you have Starman running on.
+
+=head1 Further reading
+
+If you need to deploy via other application servers or proxies, the Plack
+documentation covers a great deal of this. All of the server-specific
+documentation is covered in the L<Plack::Handler> classes (like
+L<Plack::Handler::FCGI>, L<Plack::Handler::Apache2>, etc). In addition, the
+L<Plack advent calendar|http://advent.plackperl.org/> contains a lot of useful
+tips and tricks.
+
+=cut
