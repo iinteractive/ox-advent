@@ -1,0 +1,188 @@
+Title: PSGI
+Topic: OX
+Author: Jesse Luehrs <jesse.luehrs@iinteractive.com>
+
+=head1 Overview
+
+L<PSGI> is the Perl (web) Server Gateway Interface. It defines a protocol for
+Perl web applications to communicate with web servers in such a way that
+applications can just write code using the protocol and automatically work on
+any web server that supports PSGI (which is most of them, these days). It
+consists of two main parts: the request API and the response API. A PSGI
+application is just a subroutine which takes a request environment hashref as a
+parameter and returns a valid response.
+
+In OX, you create a PSGI application by calling the C<to_app> method on an
+application instance. This is also used as the return value of the C<router>
+block, to make writing short applications easier.
+
+=head1 Request
+
+The request environment is a hashref containing all of the request data. You
+can access the actual request environment in OX via the C<env> method on an
+L<OX::Request> object. It is typically easier, however, to access the data via
+the methods on the request object. The raw environment hashref is available if
+you need to do more complicated things, or if OX::Request doesn't expose the
+data that you need.
+
+One thing that is exposed in the environment that may be useful is information
+about the capabilities of the server you are currently running on. PSGI
+discourages relying on specific server implementations if at all possible - any
+functionality you may need from a server should be exposed in a general way, so
+that other servers can also implement it. Some examples are:
+
+=over 4
+
+=item *
+
+C<psgi.multithread>
+
+The server runs multiple requests simultaneously in separate threads.
+
+=item *
+
+C<psgi.multiprocess>
+
+The server runs multiple requests simultaneously in separate processes.
+
+=item *
+
+C<psgi.run_once>
+
+The server only runs a single request in a given process (like CGI).
+
+=item *
+
+C<psgi.nonblocking>
+
+The server supports non-blocking operation via an event loop. You should make
+sure that your application uses a compatible event loop if you want to interact
+with it.
+
+=item *
+
+C<psgi.streaming>
+
+The server supports streaming responses. These will be described in the next
+section.
+
+=back
+
+=head1 Response
+
+Understanding how the response protocol works is much more useful, since action
+subroutines in OX can return any valid PSGI response (as well as a few
+additional things described earlier). A PSGI response is either a three-element
+array reference, or (if C<psgi.streaming> is true) a code reference. The three
+elements of the array reference are, in order:
+
+=over 4
+
+=item *
+
+The response code. This is a single integer between 100 and 599.
+
+=item *
+
+An arrayref containing the headers, in key-value pairs. It is an arrayref
+rather than a hashref because the HTTP specification allows certain headers to
+be specified multiple times. This must contain at least a C<Content-Type>
+entry, unless the response code is C<1xx>, C<204>, or C<304>.
+
+=item *
+
+The response body. This can either be an arrayref of strings or a filehandle of
+some sort.
+
+=back
+
+For instance, a simple response could look like this:
+
+=begin vim perl
+
+  [ 200, [ 'Content-Type' => 'text/plain' ], [ "Hello world!" ] ]
+
+=end vim
+
+In addition, if the C<psgi.streaming> variable is true in the environment, the
+response can be a coderef. This coderef will receive a callback subroutine as
+its only argument. You can use this callback in one of two ways.
+
+The simplest way to use it is to just call the callback with a full response
+arrayref as described above. This can be useful if you are running on a
+nonblocking server, and want to not block the server while you wait for
+response data to be fetched.
+
+For instance:
+
+=begin vim perl
+
+  sub {
+      my $responder = shift;
+      my $data = slow_database_query();
+      $responder->([200, ['Content-Type' => 'text/html'], [render($data)]]);
+  }
+
+=end vim
+
+In addition, this form of response can be used for HTTP server push (also known
+as long-poll or Comet) applications. In these kinds of requests, the connection
+remains open, and the server streams data to the client, which reads it as it
+comes in. To support this, you can pass the callback an arrayref containing
+only the first two elements (response code and headers). In this case, the
+callback will return an object which implements two methods, C<write> and
+C<close>, which can be used to send data to the client directly.
+
+An example of this type of response:
+
+=begin vim perl
+
+  sub {
+      my $responder = shift;
+      my $writer = $responder->([200, ['Content-Type' => 'application/json']]);
+      while (my $event = get_next_event()) {
+          $writer->write(encode_json($event) . "\n");
+      }
+      $writer->close;
+  }
+
+=end vim
+
+=head2 C<response_cb>
+
+Middleware can be applied to any PSGI application, and if they need to modify
+the response, dealing with all of these different kinds of responses can be
+difficult. Plack provides C<Plack::Util::response_cb> to handle this situation
+more conveniently. It takes a PSGI response and a coderef, and returns an
+updated PSGI response after having been filtered through the coderef. For
+instance:
+
+=begin vim perl
+
+  $res = Plack::Util::response_cb($res, sub {
+      my $res = shift;
+      push @{ $res->[1] }, ('X-Foo' => 'Bar');
+  });
+
+=end vim
+
+In this case, the response is updated in-place and returned (and the return
+value from the subroutine is ignored).
+
+Alternatively, you can return a code reference from the subroutine, and it will
+be used as a content filter. For instance:
+
+=begin vim perl
+
+  $res = Plack::Util::response_cb($res, sub {
+      my $res = shift;
+      return sub {
+          my $chunk = shift;
+          return unless defined $chunk;
+          return uc($chunk);
+      };
+  });
+
+=end vim
+
+=cut
