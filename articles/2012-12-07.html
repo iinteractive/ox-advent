@@ -21,9 +21,9 @@ block, to make writing short applications easier.
 The request environment is a hashref containing all of the request data. You
 can access the actual request environment in OX via the C<env> method on an
 L<OX::Request> object. It is typically easier, however, to access the data via
-the methods on the request object. The raw environment hashref is available if
-you need to do more complicated things, or if OX::Request doesn't expose the
-data that you need.
+the methods on the request object (which we will discuss tomorrow). The raw
+environment hashref is available if you need to do more complicated things, or
+if OX::Request doesn't expose the data that you need.
 
 One thing that is exposed in the environment that may be useful is information
 about the capabilities of the server you are currently running on. PSGI
@@ -70,11 +70,11 @@ section.
 
 =head1 Response
 
-Understanding how the response protocol works is much more useful, since action
-subroutines in OX can return any valid PSGI response (as well as a few
-additional things described earlier). A PSGI response is either a three-element
-array reference, or (if C<psgi.streaming> is true) a code reference. The three
-elements of the array reference are, in order:
+Understanding how the response protocol works is much more useful, since, as
+mentioned previously, action subroutines in OX can return not only a string or
+a response object, but also any valid PSGI response. A PSGI response is either
+a three-element array reference, or (if C<psgi.streaming> is true) a code
+reference. The three elements of the array reference are, in order:
 
 =over 4
 
@@ -129,9 +129,9 @@ In addition, this form of response can be used for HTTP server push (also known
 as long-poll or Comet) applications. In these kinds of requests, the connection
 remains open, and the server streams data to the client, which reads it as it
 comes in. To support this, you can pass the callback an arrayref containing
-only the first two elements (response code and headers). In this case, the
-callback will return an object which implements two methods, C<write> and
-C<close>, which can be used to send data to the client directly.
+only the first two elements (response code and headers). The callback will then
+return an object which implements two methods, C<write> and C<close>, which can
+be used to send data to the client directly.
 
 An example of this type of response:
 
