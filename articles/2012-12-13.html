@@ -79,10 +79,11 @@ controller service:
 
 This looks through all of the required attributes in MyApp::Controller, finds
 the ones with type constraints that correspond to classes, and looks for
-services in the OX application which correspond to those classes. Any services
-that it finds are automatically added to the list of dependencies that the
-service explicitly specifies (if any). This can't entirely replace manually
-specifying dependencies, but it can greatly simplify them.
+services in the OX application whose type constraints correspond to those
+classes. Any services that it finds are automatically added to the list of
+dependencies that the service explicitly specifies (if any). This can't
+entirely replace manually specifying dependencies, but it can greatly simplify
+them.
 
 =head1 Lifecycles
 
