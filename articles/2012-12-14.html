@@ -8,7 +8,7 @@ At this point, you've had almost 2 weeks worth of in-depth details
 about the L<OX> framework, including entries L<Path::Router>,
 L<Bread::Board::Declare>, L<OX::Request> and L<OX::Response>, and
 Plack, PSGI, and more middleware than you can shake a stick at. After
-that deep dive into all the components that you E<can> make use of in
+that deep dive into all the components that you I<can> make use of in
 an OX application, it's a good time to step back and look at the big
 picture again, and review what I consider to be one of OX's greatest
 strengths: the way it allows you to develop applications across a wide
@@ -63,43 +63,46 @@ pomodoro on this problem, and what I came up with looks like this:
 
 =begin vim perl
 
-package PomodorOX;
-use OX;
+  package PomodorOX;
+  use OX;
 
-use Lingua::EN::Numbers qw/ num2en_ordinal /;
+  use Lingua::EN::Numbers qw/ num2en_ordinal /;
 
-my $goal   = 12;
-my $done   = 0;
-my $state  = 'initial';
+  my $goal   = 12;
+  my $done   = 0;
+  my $state  = 'initial';
 
-router as {
-  route '/' => sub {
-    my $ord = num2en_ordinal( $done+1 );
+  router as {
+    route '/' => sub {
+      my $ord = num2en_ordinal( $done+1 );
 
-    my $label = ( $state eq 'break' or $state eq 'initial') ?
-      "Start $ord pomodoro" : "Finish $ord pomodoro and take a break";
+      my $label = ( $state eq 'break' or $state eq 'initial') ?
+        "Start $ord pomodoro" : "Finish $ord pomodoro and take a break";
 
-    if ( $state eq 'pomo' ) {
-      $state = 'break';
-      $done++;
-    }
-    else { $state = 'pomo' }
+      if ( $state eq 'pomo' ) {
+        $state = 'break';
+        $done++;
+      }
+      else { $state = 'pomo' }
 
-    return <<EOHTML;
-<p>POMODOROS DONE / PLANNED: $done / $goal
-<input type="button" value="$label" onclick="window.location = '/';" /></p>
-EOHTML
+      return <<EOHTML;
+  <p>POMODOROS DONE / PLANNED: $done / $goal
+  <input type="button" value="$label" onclick="window.location = '/';" /></p>
+  EOHTML
+    };
   };
-};
 
 =end vim
 
 This simple module implements a simple pomodoro tracker, which will
 keep track of how many pomodoros you've completed over the course of
-the day. (Note: you can download this application at FIXME.) As we saw
-way back in L<Day 1>, since the C<router> block returns a valid PSGI
-application, you can load this module directly with C<plackup> to run
-this application.
+the day. As we saw way back in day 1, since the C<router> block
+returns a valid PSGI application, you can load this module directly
+with C<plackup> to run this application.
+
+=for html
+(Note: you can download this application
+<a href="pomodoro.psgi">here</a>.)
 
 =head1 Evolve Or Die
 
@@ -114,43 +117,43 @@ of hard-coding it. That might look like this:
 
 =begin vim perl
 
-package PomodorOX;
-use OX;
-use 5.012;
+  package PomodorOX;
+  use OX;
+  use 5.012;
 
-use Lingua::EN::Numbers qw/ num2en_ordinal /;
-B<use YAML                qw/ LoadFile /;
+  use Lingua::EN::Numbers qw/ num2en_ordinal /;
+  use YAML                qw/ LoadFile /;
 
-my $config = LoadFile( 'pomodorox.yaml' );
-my $goal   = $config->{goal} // 12;>
-my $done   = 0;
-my $state  = 'initial';
+  my $config = LoadFile( 'pomodorox.yaml' );
+  my $goal   = $config->{goal} // 12;
+  my $done   = 0;
+  my $state  = 'initial';
 
-router as {
-  route '/' => sub {
-    my $ord = num2en_ordinal( $done+1 );
+  router as {
+    route '/' => sub {
+      my $ord = num2en_ordinal( $done+1 );
 
-    my $label = ( $state eq 'break' or $state eq 'initial') ?
-      "Start $ord pomodoro" : "Finish $ord pomodoro and take a break";
+      my $label = ( $state eq 'break' or $state eq 'initial') ?
+        "Start $ord pomodoro" : "Finish $ord pomodoro and take a break";
 
-    if ( $state eq 'pomo' ) {
-      $state = 'break';
-      $done++;
-    }
-    else { $state = 'pomo' }
+      if ( $state eq 'pomo' ) {
+        $state = 'break';
+        $done++;
+      }
+      else { $state = 'pomo' }
 
-    return <<EOHTML;
-<p>
-  POMODOROS DONE / PLANNED: $done / $goal
-  <input type="button" value="$label" onclick="window.location = '/';" />
-</p>
-EOHTML
+      return <<EOHTML;
+  <p>
+    POMODOROS DONE / PLANNED: $done / $goal
+    <input type="button" value="$label" onclick="window.location = '/';" />
+  </p>
+  EOHTML
+    };
   };
-};
 
 =end vim
 
-Only those bolded lines would need to change to add a configuration
+Only lines 6-9 would need to change to add a configuration
 file. Further, because OX is completely configuration-system agnostic,
 you don't have to use L<YAML>. You could use L<Config::General>, or
 L<XML::Simple>, or roll your own C<PomodorOX::Config> module.
