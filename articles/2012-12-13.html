@@ -1,0 +1,131 @@
+Title: More Bread::Board
+Topic: OX
+Author: Jesse Luehrs <jesse.luehrs@iinteractive.com>
+
+=head1 Typemaps and Dependency Inference
+
+Most of the classes in your application will probably only need to be
+instantiated in one way. You probably won't have multiple instances of a model
+class, for instance. This means that when you mention the model class in one of
+your controller classes, it's unambiguous what you're actually asking for -
+there's no reason that you should need to explicitly list it as a dependency,
+since it's already listed as the type constraint in the controller.
+Bread::Board understands this, and can be used to automatically introspect the
+dependency list for your classes via the attributes that they declare.
+
+Given an application like this:
+
+=begin vim perl
+
+  package MyApp::Model;
+  use Moose;
+
+  has dsn => (
+      is       => 'ro',
+      isa      => 'Str',
+      required => 1,
+  );
+
+  package MyApp::Controller;
+  use Moose;
+
+  has model => (
+      is       => 'ro',
+      isa      => 'MyApp::Model',
+      required => 1,
+  );
+
+  # ...
+
+  package MyApp;
+  use OX;
+
+  has dsn => (
+      is    => 'ro',
+      isa   => 'Str',
+      value => 'dbi:mysql:myapp',
+  );
+
+  has model => (
+      is           => 'ro',
+      isa          => 'MyApp::Model',
+      dependencies => ['dsn'],
+  );
+
+  has controller => (
+      is           => 'ro',
+      isa          => 'MyApp::Controller',
+      dependencies => ['model'],
+  );
+
+  router as {
+      # ...
+  };
+
+=end vim
+
+we can instead tell Bread::Board to I<infer> the dependencies for the
+controller service:
+
+=begin vim perl
+
+  has controller => (
+      is    => 'ro',
+      isa   => 'MyApp::Controller',
+      infer => 1,
+  );
+
+=end vim
+
+This looks through all of the required attributes in MyApp::Controller, finds
+the ones with type constraints that correspond to classes, and looks for
+services in the OX application which correspond to those classes. Any services
+that it finds are automatically added to the list of dependencies that the
+service explicitly specifies (if any). This can't entirely replace manually
+specifying dependencies, but it can greatly simplify them.
+
+=head1 Lifecycles
+
+By default, any time a service is resolved, a new instance is created. This is
+generally what you want (to avoid inadvertently leaking data between requests),
+but sometimes persisting data is necessary. For instance, you probably don't
+want to reconnect to the database on every single request, if performance is
+important for your application. In this case, you can specify a different
+I<lifecycle> for a particular service:
+
+=begin vim perl
+
+  has dsn => (
+      is    => 'ro',
+      isa   => 'Str',
+      value => 'dbi:mysql:myapp',
+  );
+
+  has dbh => (
+      is           => 'ro',
+      dependencies => ['dsn'],
+      lifecycle    => 'Singleton',
+      block        => sub {
+          my $s = shift;
+          return DBI->connect($s->param('dsn'));
+      },
+  );
+
+  has model => (
+      is           => 'ro',
+      isa          => 'MyApp::Model',
+      dependencies => ['dbh'],
+  );
+
+=end vim
+
+Here, the C<dbh> service will be instantiated the first time that it is
+requested, but then every subsequent time, it will return the same instance. In
+this example, every time the C<model> service is resolved, a new MyApp::Model
+instance will be created, but each of those instances will use the same C<dbh>.
+
+In addition to the C<Singleton> lifecycle, you can also specify a C<Request>
+lifecycle. This will act like C<Singleton>, except that the cached value will
+be cleared between requests.
+
+=cut
