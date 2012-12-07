@@ -1,186 +1,132 @@
-Title: Back To Basics
+Title: More Bread::Board
 Topic: OX
-Author: John SJ Anderson <john.anderson@iinteractive.com>
+Author: Jesse Luehrs <jesse.luehrs@iinteractive.com>
 
-=head1 Round And Round It Goes
+=head1 Typemaps and Dependency Inference
 
-At this point, you've had almost 2 weeks worth of in-depth details
-about the L<OX> framework, including entries L<Path::Router>,
-L<Bread::Board::Declare>, L<OX::Request> and L<OX::Response>, and
-Plack, PSGI, and more middleware than you can shake a stick at. After
-that deep dive into all the components that you I<can> make use of in
-an OX application, it's a good time to step back and look at the big
-picture again, and review what I consider to be one of OX's greatest
-strengths: the way it allows you to develop applications across a wide
-range of scales, and to iteratively move from one scale to another as
-the complexity of your application changes over time. Like so-called
-micro-frameworks, OX allows you to start developing an application as
-a single simple module -- and then over time, if the complexity of the
-problem calls for it, you can iteratively evolve your app into a
-multi-module monster, with a full MVC-oriented architecture (or MVA,
-or whatever the flavor du jour design pattern is). Because OX
-applications are really just Moose applications, they can be as simple
-or as complex as you need.
+Most of the classes in your application will probably only need to be
+instantiated in one way. You probably won't have multiple instances of a model
+class, for instance. This means that when you mention the model class in one of
+your controller classes, it's unambiguous what you're actually asking for -
+there's no reason that you should need to explicitly list it as a dependency,
+since it's already listed as the type constraint in the controller.
+Bread::Board understands this, and can be used to automatically introspect the
+dependency list for your classes via the attributes that they declare.
 
-=head1 My Pomodoro Technique Is (Almost) Unstoppable
-
-Let's say you wanted to develop a simple web-based application to help
-you use the L<Pomodoro
-Technique|https://en.wikipedia.org/wiki/Pomodoro_Technique> during
-your daily work. The basic principle of this technique is alternating
-periods of work (typically 25 or 50 minutes long) with short breaks
-(usually 5 to 10 minutes). Each cycle is called a "pomodoro", and
-every three to four pomodoros, you take a longer break (usually 30
-minutes). During the course of a single pomodoro, you focus
-exclusively on finishing a single task, such as implementing a new
-feature or fixing a bug.
-
-I like the Pomodoro Technique quite a bit, and I have found that on
-those days when I don't have a lot of external interruptions
-(meetings, client phone calls, etc.), it's a really good way to
-balance staying focused on work with making sure I don't completely
-lose track of time or the overall structure of my day. I can make a
-rough plan at the beginning of the day -- this many pomodoros on this
-task, this many on that -- and then I have a rough outline for how my
-day should go.
-
-The biggest problem I have with my Pomodoro Technique -- aside from
-those pesky client calls! -- is keeping track of which pomodoro I'm on
-to know when I should take my longer break. Was that the third or the
-fourth pomodoro? The fourth or the fifth? I frequently have that
-longer break set aside as a time to eat lunch, run an errand, or go
-for a walk or jog, so I want to make sure I take care of those things
-as well.
-
-=head1 PomodorOX To The Rescue
-
-Let's make the simplest possible OX application to track which
-Pomodoro we're on at any given point. Since this is going to be
-something I run locally and that typically won't be seen by anybody
-other than me, it can be as ugly... I mean, as simple and
-pragmatically efficient, as it needs to be. I spent about one
-pomodoro on this problem, and what I came up with looks like this:
+Given an application like this:
 
 =begin vim perl
 
-  package PomodorOX;
+  package MyApp::Model;
+  use Moose;
+
+  has dsn => (
+      is       => 'ro',
+      isa      => 'Str',
+      required => 1,
+  );
+
+  package MyApp::Controller;
+  use Moose;
+
+  has model => (
+      is       => 'ro',
+      isa      => 'MyApp::Model',
+      required => 1,
+  );
+
+  # ...
+
+  package MyApp;
   use OX;
 
-  use Lingua::EN::Numbers qw/ num2en_ordinal /;
+  has dsn => (
+      is    => 'ro',
+      isa   => 'Str',
+      value => 'dbi:mysql:myapp',
+  );
 
-  my $goal   = 12;
-  my $done   = 0;
-  my $state  = 'initial';
+  has model => (
+      is           => 'ro',
+      isa          => 'MyApp::Model',
+      dependencies => ['dsn'],
+  );
+
+  has controller => (
+      is           => 'ro',
+      isa          => 'MyApp::Controller',
+      dependencies => ['model'],
+  );
 
   router as {
-    route '/' => sub {
-      my $ord = num2en_ordinal( $done+1 );
-
-      my $label = ( $state eq 'break' or $state eq 'initial') ?
-        "Start $ord pomodoro" : "Finish $ord pomodoro and take a break";
-
-      if ( $state eq 'pomo' ) {
-        $state = 'break';
-        $done++;
-      }
-      else { $state = 'pomo' }
-
-      return <<EOHTML;
-  <p>POMODOROS DONE / PLANNED: $done / $goal
-  <input type="button" value="$label" onclick="window.location = '/';" /></p>
-  EOHTML
-    };
+      # ...
   };
 
 =end vim
 
-This simple module implements a simple pomodoro tracker, which will
-keep track of how many pomodoros you've completed over the course of
-the day. As we saw way back in day 1, since the C<router> block
-returns a valid PSGI application, you can load this module directly
-with C<plackup> to run this application.
-
-=for html
-(Note: you can download this application
-<a href="pomodoro.psgi">here</a>.)
-
-=head1 Evolve Or Die
-
-One could code this simple application in any of a number of Perl web
-frameworks and it would look essentially the same -- what's the
-advantage of OX, exactly? The advantage, as I said above, is in the
-way the OX framework allows you to iteratively evolve an application
-without huge changes in the application structure. For example, let's
-say you decided that you wanted to load the goal -- the number of
-Pomodoros you're trying to do in a day -- from a config file instead
-of hard-coding it. That might look like this:
+we can instead tell Bread::Board to I<infer> the dependencies for the
+controller service:
 
 =begin vim perl
 
-  package PomodorOX;
-  use OX;
-  use 5.012;
-
-  use Lingua::EN::Numbers qw/ num2en_ordinal /;
-  use YAML                qw/ LoadFile /;
-
-  my $config = LoadFile( 'pomodorox.yaml' );
-  my $goal   = $config->{goal} // 12;
-  my $done   = 0;
-  my $state  = 'initial';
-
-  router as {
-    route '/' => sub {
-      my $ord = num2en_ordinal( $done+1 );
-
-      my $label = ( $state eq 'break' or $state eq 'initial') ?
-        "Start $ord pomodoro" : "Finish $ord pomodoro and take a break";
-
-      if ( $state eq 'pomo' ) {
-        $state = 'break';
-        $done++;
-      }
-      else { $state = 'pomo' }
-
-      return <<EOHTML;
-  <p>
-    POMODOROS DONE / PLANNED: $done / $goal
-    <input type="button" value="$label" onclick="window.location = '/';" />
-  </p>
-  EOHTML
-    };
-  };
+  has controller => (
+      is    => 'ro',
+      isa   => 'MyApp::Controller',
+      infer => 1,
+  );
 
 =end vim
 
-Only lines 6-9 would need to change to add a configuration
-file. Further, because OX is completely configuration-system agnostic,
-you don't have to use L<YAML>. You could use L<Config::General>, or
-L<XML::Simple>, or roll your own C<PomodorOX::Config> module.
+This looks through all of the required attributes in MyApp::Controller, finds
+the ones with type constraints that correspond to classes, and looks for
+services in the OX application whose type constraints correspond to those
+classes. Any services that it finds are automatically added to the list of
+dependencies that the service explicitly specifies (if any). This can't
+entirely replace manually specifying dependencies, but it can greatly simplify
+them.
 
-=head1 Longest Journey, Single Step, You Know The Drill
+=head1 Lifecycles
 
-The point of this article is not that you need to start all your web
-applications with a single module design. That would be silly. The
-point is also not that you should use the Pomodoro Technique --
-although you may want to give it a shot.
+By default, any time a service is resolved, a new instance is created. This is
+generally what you want (to avoid inadvertently leaking data between requests),
+but sometimes persisting data is necessary. For instance, you probably don't
+want to reconnect to the database on every single request, if performance is
+important for your application. In this case, you can specify a different
+I<lifecycle> for a particular service:
 
-No, the point of this article is that, while OX does build on a number
-of components, and on some concepts (such as dependency injection and
-inversion of control) that have a reputation as being somewhat
-difficult to get ones head around, you don't really have to deal with
-those concepts to start using OX. You can start making useful web
-applications using only the simplest parts of L<Path::Router>, and
-move on up to the capabilities that the L<Bread::Board::Sugar>-based
-service resolution gives you once you get to the point where your
-application needs it.
+=begin vim perl
 
-So block out a pomodoro or two today, and make a simple OX app. (If
-you can't think of anything special to do, make PomodorOX suck just a
-tiny bit less.) Once you've got that app working, add another bit of
-functionality. When you've gotten it to the point where you really
-want to refactor that inline action path out of the router block, then
-you're ready to go back and review the first few days in this
-calendar, and join C<#ox> and start asking questions.
+  has dsn => (
+      is    => 'ro',
+      isa   => 'Str',
+      value => 'dbi:mysql:myapp',
+  );
 
-Happy coding and happy holidays!
+  has dbh => (
+      is           => 'ro',
+      dependencies => ['dsn'],
+      lifecycle    => 'Singleton',
+      block        => sub {
+          my $s = shift;
+          return DBI->connect($s->param('dsn'));
+      },
+  );
+
+  has model => (
+      is           => 'ro',
+      isa          => 'MyApp::Model',
+      dependencies => ['dbh'],
+  );
+
+=end vim
+
+Here, the C<dbh> service will be instantiated the first time that it is
+requested, but then every subsequent time, it will return the same instance. In
+this example, every time the C<model> service is resolved, a new MyApp::Model
+instance will be created, but each of those instances will use the same C<dbh>.
+
+In addition to the C<Singleton> lifecycle, you can also specify a C<Request>
+lifecycle. This will act like C<Singleton>, except that the cached value will
+be cleared between requests.
+
+=cut

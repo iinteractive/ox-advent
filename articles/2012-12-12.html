@@ -1,172 +1,186 @@
-Title: Roles and Inheritance
+Title: Back To Basics
 Topic: OX
-Author: Jesse Luehrs <jesse.luehrs@iinteractive.com>
+Author: John SJ Anderson <john.anderson@iinteractive.com>
 
-=head1 Roles
+=head1 Round And Round It Goes
 
-OX applications are just a special type of Moose class, and this includes
-supporting role application. You can define roles for various parts of your
-application, and then compose them into the main application class. The only
-difference is that in order to support composition of things like routes and
-services, you will need to C<use> the L<OX::Role> module instead of
-L<Moose::Role>. This will provide the appropriate support for defining router
-components and services.
+At this point, you've had almost 2 weeks worth of in-depth details
+about the L<OX> framework, including entries L<Path::Router>,
+L<Bread::Board::Declare>, L<OX::Request> and L<OX::Response>, and
+Plack, PSGI, and more middleware than you can shake a stick at. After
+that deep dive into all the components that you I<can> make use of in
+an OX application, it's a good time to step back and look at the big
+picture again, and review what I consider to be one of OX's greatest
+strengths: the way it allows you to develop applications across a wide
+range of scales, and to iteratively move from one scale to another as
+the complexity of your application changes over time. Like so-called
+micro-frameworks, OX allows you to start developing an application as
+a single simple module -- and then over time, if the complexity of the
+problem calls for it, you can iteratively evolve your app into a
+multi-module monster, with a full MVC-oriented architecture (or MVA,
+or whatever the flavor du jour design pattern is). Because OX
+applications are really just Moose applications, they can be as simple
+or as complex as you need.
+
+=head1 My Pomodoro Technique Is (Almost) Unstoppable
+
+Let's say you wanted to develop a simple web-based application to help
+you use the L<Pomodoro
+Technique|https://en.wikipedia.org/wiki/Pomodoro_Technique> during
+your daily work. The basic principle of this technique is alternating
+periods of work (typically 25 or 50 minutes long) with short breaks
+(usually 5 to 10 minutes). Each cycle is called a "pomodoro", and
+every three to four pomodoros, you take a longer break (usually 30
+minutes). During the course of a single pomodoro, you focus
+exclusively on finishing a single task, such as implementing a new
+feature or fixing a bug.
+
+I like the Pomodoro Technique quite a bit, and I have found that on
+those days when I don't have a lot of external interruptions
+(meetings, client phone calls, etc.), it's a really good way to
+balance staying focused on work with making sure I don't completely
+lose track of time or the overall structure of my day. I can make a
+rough plan at the beginning of the day -- this many pomodoros on this
+task, this many on that -- and then I have a rough outline for how my
+day should go.
+
+The biggest problem I have with my Pomodoro Technique -- aside from
+those pesky client calls! -- is keeping track of which pomodoro I'm on
+to know when I should take my longer break. Was that the third or the
+fourth pomodoro? The fourth or the fifth? I frequently have that
+longer break set aside as a time to eat lunch, run an errand, or go
+for a walk or jog, so I want to make sure I take care of those things
+as well.
+
+=head1 PomodorOX To The Rescue
+
+Let's make the simplest possible OX application to track which
+Pomodoro we're on at any given point. Since this is going to be
+something I run locally and that typically won't be seen by anybody
+other than me, it can be as ugly... I mean, as simple and
+pragmatically efficient, as it needs to be. I spent about one
+pomodoro on this problem, and what I came up with looks like this:
 
 =begin vim perl
 
-  package MyApp::Auth;
-  use OX::Role;
-
-  has auth => (
-      is           => 'ro',
-      isa          => 'MyApp::Controller::Auth',
-      dependencies => ['model'],
-  );
-
-  router as {
-      route '/login'  => 'auth.login';
-      route '/logout' => 'auth.logout';
-  };
-
-  package MyApp;
+  package PomodorOX;
   use OX;
 
-  with 'MyApp::Auth';
+  use Lingua::EN::Numbers qw/ num2en_ordinal /;
 
-  has model => (
-      is  => 'ro',
-      isa => 'MyApp::Model',
-  );
-
-  has root => (
-      is           => 'ro',
-      isa          => 'MyApp::Controller::Root',
-      dependencies => ['model'],
-  );
+  my $goal   = 12;
+  my $done   = 0;
+  my $state  = 'initial';
 
   router as {
-      route '/' => 'root.index';
+    route '/' => sub {
+      my $ord = num2en_ordinal( $done+1 );
+
+      my $label = ( $state eq 'break' or $state eq 'initial') ?
+        "Start $ord pomodoro" : "Finish $ord pomodoro and take a break";
+
+      if ( $state eq 'pomo' ) {
+        $state = 'break';
+        $done++;
+      }
+      else { $state = 'pomo' }
+
+      return <<EOHTML;
+  <p>POMODOROS DONE / PLANNED: $done / $goal
+  <input type="button" value="$label" onclick="window.location = '/';" /></p>
+  EOHTML
+    };
   };
 
 =end vim
 
-Here, C</>, C</login>, and C</logout> will all be valid routes for the
-application - the role composition process will merge the routes defined in
-each role into the main application's router. This follows the normal role
-composition algorithm, so you can do things like override a route from a role
-by defining a new route for the same path in the class:
+This simple module implements a simple pomodoro tracker, which will
+keep track of how many pomodoros you've completed over the course of
+the day. As we saw way back in day 1, since the C<router> block
+returns a valid PSGI application, you can load this module directly
+with C<plackup> to run this application.
+
+=for html
+(Note: you can download this application
+<a href="pomodoro.psgi">here</a>.)
+
+=head1 Evolve Or Die
+
+One could code this simple application in any of a number of Perl web
+frameworks and it would look essentially the same -- what's the
+advantage of OX, exactly? The advantage, as I said above, is in the
+way the OX framework allows you to iteratively evolve an application
+without huge changes in the application structure. For example, let's
+say you decided that you wanted to load the goal -- the number of
+Pomodoros you're trying to do in a day -- from a config file instead
+of hard-coding it. That might look like this:
 
 =begin vim perl
 
-  package MyApp;
+  package PomodorOX;
   use OX;
+  use 5.012;
 
-  has model => (
-      is  => 'ro',
-      isa => 'MyApp::Model',
-  );
+  use Lingua::EN::Numbers qw/ num2en_ordinal /;
+  use YAML                qw/ LoadFile /;
 
-  has root => (
-      is           => 'ro',
-      isa          => 'MyApp::Controller::Root',
-      dependencies => ['model'],
-  );
+  my $config = LoadFile( 'pomodorox.yaml' );
+  my $goal   = $config->{goal} // 12;
+  my $done   = 0;
+  my $state  = 'initial';
 
   router as {
-      route '/'      => 'root.index';
-      route '/login' => 'root.login';
-  };
+    route '/' => sub {
+      my $ord = num2en_ordinal( $done+1 );
 
-  with 'MyApp::Auth';
+      my $label = ( $state eq 'break' or $state eq 'initial') ?
+        "Start $ord pomodoro" : "Finish $ord pomodoro and take a break";
 
-=end vim
+      if ( $state eq 'pomo' ) {
+        $state = 'break';
+        $done++;
+      }
+      else { $state = 'pomo' }
 
-Here, C</login> will call the C<root.login> action rather than the
-C<auth.login> action. Note how the role application needs to happen at the end
-in this case, since otherwise OX will think you are trying to define a route
-for a path that already has a route defined for it and throw an error (this is
-effectively the same kind of ordering issue that sometimes comes up in Moose
-roles with method modifiers).
-
-One other thing to note is that roles don't support the C<wrap> or C<wrap_if>
-keywords. This is because middleware application is really an
-application-global effect, and so middleware defined in a role would affect not
-only routes defined in that role, but all routes defined in the class (and
-other roles that the class consumes). This could potentially be quite
-confusing, so we currently don't allow it. This may change in the future if we
-can come up with a way to make this make more sense.
-
-=head1 Inheritance
-
-OX applications also support inheritance. Not only can attributes and methods
-be overridden as expected, but routes, mounts, and middleware also participate
-in inheritance. This provides a level of reuse by allowing you to create
-another application with the same basic structure, but a few extra features.
-
-For instance, if you have an application that looks like this:
-
-=begin vim perl
-
-  package MyApp;
-  use OX;
-
-  has dsn => (
-      is    => 'ro',
-      isa   => 'Str',
-      value => 'dbi:mysql:myapp',
-  );
-
-  has model => (
-      is           => 'ro',
-      isa          => 'MyApp::Model',
-      dependencies => ['dsn'],
-  );
-
-  has root => (
-      is           => 'ro',
-      isa          => 'MyApp::Controller::Root',
-      dependencies => ['model'],
-  );
-
-  router as {
-      route '/'         => 'root.index';
-      route '/register' => 'root.register';
-      route '/login'    => 'root.login';
+      return <<EOHTML;
+  <p>
+    POMODOROS DONE / PLANNED: $done / $goal
+    <input type="button" value="$label" onclick="window.location = '/';" />
+  </p>
+  EOHTML
+    };
   };
 
 =end vim
 
-you can create a specialization of it for testing via something like this:
+Only lines 6-9 would need to change to add a configuration
+file. Further, because OX is completely configuration-system agnostic,
+you don't have to use L<YAML>. You could use L<Config::General>, or
+L<XML::Simple>, or roll your own C<PomodorOX::Config> module.
 
-=begin vim perl
+=head1 Longest Journey, Single Step, You Know The Drill
 
-  package MyApp::Test;
-  use OX;
+The point of this article is not that you need to start all your web
+applications with a single module design. That would be silly. The
+point is also not that you should use the Pomodoro Technique --
+although you may want to give it a shot.
 
-  extends 'MyApp';
+No, the point of this article is that, while OX does build on a number
+of components, and on some concepts (such as dependency injection and
+inversion of control) that have a reputation as being somewhat
+difficult to get ones head around, you don't really have to deal with
+those concepts to start using OX. You can start making useful web
+applications using only the simplest parts of L<Path::Router>, and
+move on up to the capabilities that the L<Bread::Board::Sugar>-based
+service resolution gives you once you get to the point where your
+application needs it.
 
-  has '+dsn' => (
-      value => 'dbi:SQLite::memory:',
-  );
+So block out a pomodoro or two today, and make a simple OX app. (If
+you can't think of anything special to do, make PomodorOX suck just a
+tiny bit less.) Once you've got that app working, add another bit of
+functionality. When you've gotten it to the point where you really
+want to refactor that inline action path out of the router block, then
+you're ready to go back and review the first few days in this
+calendar, and join C<#ox> and start asking questions.
 
-  has debug => (
-      is           => 'ro',
-      isa          => 'MyApp::Controller::Debug',
-      dependencies => ['model'],
-  );
-
-  router as {
-      route '/dump_users'    => 'debug.dump_users';
-      route '/dump_accesses' => 'debug.dump_accesses';
-  };
-
-=end vim
-
-This way, the application will always access an in-memory database (rather than
-your actual production database), and it provides a couple extra endpoints to
-test that the underlying code is working properly. You can then use MyApp::Test
-in your test suite instead of MyApp, and have an application that just works
-properly in a test environment, rather than having to specially configure your
-real application every time.
-
-=cut
+Happy coding and happy holidays!
