@@ -40,7 +40,7 @@
 * HTTP::Throwable (done)
   * HTTPExceptions middleware is applied by default, so this just works
   * examples
-* plack and deployment
+* plack and deployment (done)
   * how to write a .psgi file for your app (and what belongs in it)
 * roles and inheritance (done)
   * examples
@@ -48,17 +48,17 @@
   * just normal classes, nothing special at all
   * can also be controllers themselves, to bypass the need for extra logic
 * custom routebuilders (doy)
-* additional bread::board features (doy)
+* additional bread::board features (done)
   * subcontainers
   * type inference
   * lifecycles
-* without the sugar (doy)
+* without the sugar (doy) (?)
   * `build_app`, `build_router`, etc
   * bread::board (underlying structure)
 * roles as plugins
 * example of authentication against a model (using middleware, not using middleware) -- or just translate http://www.catalystframework.org/calendar/2011/15 || http://www.catalystframework.org/calendar/2007/5 || http://www.catalystframework.org/calendar/2007/6
 * extend authentication example into authorization
-* example of q&d "dancer-style" inline app
+* example of q&d "dancer-style" inline app (done)
 * simple app: filesystem-based wiki (ala http://www.catalystframework.org/calendar/2009/3 || http://advent.perldancer.org/2010/3 || http://advent.perldancer.org/2010/15 || http://advent.perldancer.org/2011/7)
 * input validation example a la http://www.catalystframework.org/calendar/2010/10
 * example of converting existing catalyst app to OX, benefits, pitfalls
