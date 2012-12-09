@@ -1,0 +1,191 @@
+Title: Options For Simple Authentication
+Topic: OX
+Author: John SJ Anderson <john.anderson@iinteractive.com>
+
+=head1 Selective Sharing
+
+As we've seen, one of the nice things about the OX framework is how it
+exemplifies and amplifies the whipupitude nature of Perl. It's easy to
+go from a wild idea to a single file proof-of-concept level
+implementation with OX, and then later refactor that prototype into
+your "real" application.
+
+Personally, I find there's usually a point between "prototype" and
+"alpha" where I want to share my work with other people to get their
+feedback. That usually means putting it on an Internet-accessible
+server and mailing my collaborators the URL -- and that also means I
+need to put some sort of authentication wrapper around the prototype,
+so that the whole world can't see my work in progress.
+
+One option is to wait to share your prototype until you've gotten to
+the point of implementing the required amount of authentication in the
+application itself. This may be a ways down the road, however, and
+it's hard to wait to share. Another option is to put some HTTP
+Basic-style authentication in place via Apache C<.htaccess> files, but
+that requires some sysadmin style tinkering with htpasswd files and
+probably with your web server configuration.
+
+Since OX builds upon Plack/PSGI, a more attractive alternative is to
+leverage existing Plack middleware to add authentication directly to
+the prototype application. We can add either HTTP Basic style
+authentication, or a full-blown form-based login. Let's see what each
+of those looks like.
+
+=head1 Plack::Middleware::Auth::Basic
+
+L<Plack::Middleware::Auth::Basic>, as you might guess from the module
+name, is a middleware that implements basic types of authentication
+for your application. The module takes an C<authenticator>
+configuration option, which can be an object that implements an
+C<authenticate> method (with a C<($username,$password)> signature) or
+a simple callback function, which will also be called with the
+username and password provided in response to the authentication
+dialogue. This means an OX application implementing basic
+authentication can be as simple as:
+
+=begin vim perl
+
+  package MyOXsomeApp;
+  use OX;
+  
+  router as {
+    route '/' => sub { "hello world!" };
+  
+    wrap 'Plack::Middleware::Auth::Basic' => (
+      authenticator => literal( sub {
+        my( $user , $pass ) = @_;
+        return $user eq 's00per' and $pass eq 's3kr1t';
+      }),
+      realm => literal( "my awesome app!" ),
+    );
+  };
+
+=end vim 
+
+The C<realm> option being passed to the middleware is used to control
+what is displayed in the pop-up window that appears when the web
+browser prompts for credentials. Since C<wrap> stanzas in the
+C<router> statement do the same sort of C<Bread::Board>-based service
+resolution as other parts of C<OX>, you could also use attributes for
+the L<Plack::Middleware::Auth::Basic> parameters, like so:
+
+=begin vim perl
+
+  package MyOXsomeApp;
+  use OX;
+
+  has basic_auth_realm => ( is => 'ro' , isa => 'Str', default => 'My Awesome App!' );
+  
+  router as {
+    route '/' => sub { "hello world!" };
+  
+    wrap 'Plack::Middleware::Auth::Basic' => (
+      authenticator => literal sub {
+        my( $user , $pass ) = @_;
+        return $user eq 's00per' and $pass eq 's3kr1t';
+      },
+      realm => basic_auth_realm ,
+    );
+  };
+
+=end vim 
+
+=for html
+(Note: you can download this application
+<a href="basic.psgi">here</a>.)
+
+=head1 Plack::Middleware::Auth::Form
+
+HTTP Basic-style authentication is great when you need a quick way to
+secure access to an entire application. However, if you're trying to
+prototype an application that will have some areas that require
+authentication and some that don't, it may not be the best
+choice. Instead, consider L<Plack::Middleware::Auth::Form>, which adds
+C</login> and C</logout> endpoints to your application. You'll also
+want to load L<Plack::Middleware::Session> to provide a way to store
+details such as the username of the current
+user. C<Plack::Middleware::Auth::Form> is configured very similarly to
+C<Plack::Middleware::Auth::Basic> -- the required C<authenticator>
+option works exactly as described above, in fact.
+
+Here's a simple OX application that uses form-based authentication to
+control access to the C</admin> endpoint, while allowing
+unauthenticated access for C</>.
+
+=begin vim perl
+
+  package MyOXsomeApp;
+  use OX;
+
+  use HTTP::Throwable::Factory qw/ http_throw /;
+
+  router as {
+    route '/' => sub { "hello world!" };
+
+    route '/admin' => sub {
+      my( $request ) = @_;
+
+      my $user;
+      unless( $user = $request->session->{user_id} ) {
+        $request->session->{redir_to} = '/admin';
+        http_throw( Found => { location => '/login' } );
+      }
+
+      return "admin section!<br/>hello $user!";
+    };
+
+    wrap 'Plack::Middleware::Session' =>( store => literal( 'File' ));
+
+    wrap 'Plack::Middleware::Auth::Form' => (
+      authenticator => literal( sub {
+        my( $user , $pass ) = @_;
+        return $user eq 's00per' and $pass eq 's3kr1t';
+      }),
+    );
+  };
+
+=end vim
+
+=for html
+(Note: you can download this application
+<a href="form.psgi">here</a>.)
+
+Here we have the same C<authenticator> callback as in the previous
+example, but we're using L<Plack::Middleware::Auth::Form> instead. You
+should be able to load the C</> endpoint without being prompted for a
+password, but attempting to load C</admin> should result in you being
+redirected to C</login>, which will display a simple login form.
+
+Looking at the inline sub for the C</admin> route, we see that we're
+looking at the PSGI session hash (available via the C<sesison> method
+on the C<$request> object that is passed to the action) to see if
+there's a C<user_id> key. If there is, that means we have a logged-in
+user, and can fall pass the conditional and return a string to
+display. If we don't see a value in this key, however, that means we
+don't have a logged in user, and we want to display the login form
+instead. We can easily accomplish this by throwing a
+L<HTTP::Throwable> exception. This immediately exits the current
+subroutine and returns an object that results in a redirect being
+issued in the browser, so the login form is loaded.
+
+### FIXME: that last sentence needs help.... 
+
+(I<N.b.>, if you were implementing this type of authentication in a
+real application, you'd want to wrap up the code that checks for an
+active user and issues a redirect to C</login> inside a role that
+could be consumed by controller modules that needed this
+functionality.)
+
+=head1 Next steps
+
+When you're ready to move beyond the "prototype" stage of your
+application, you'll find yourself wanting to authentication against
+information you've got stored in a database (or another type of data
+store that you've abstracted behind a model-layer module). You'll also
+want a login form that fits into the look-and-feel of the rest of your
+site, ideally one that renders and validates input via the same
+modules as the rest of your view layer. At that point, you'll probably
+want to drop L<Plack::Middleware::Auth::Form> in favor of your own
+code. We'll leave that step as an exercise for the reader (at least
+for the moment...)
+
