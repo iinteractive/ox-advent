@@ -49,8 +49,6 @@ authentication can be as simple as:
   use OX;
   
   router as {
-    route '/' => sub { "hello world!" };
-  
     wrap 'Plack::Middleware::Auth::Basic' => (
       authenticator => literal( sub {
         my( $user , $pass ) = @_;
@@ -58,6 +56,8 @@ authentication can be as simple as:
       }),
       realm => literal( "my awesome app!" ),
     );
+
+    route '/' => sub { "hello world!" };
   };
 
 =end vim 
@@ -77,15 +77,15 @@ the L<Plack::Middleware::Auth::Basic> parameters, like so:
   has basic_auth_realm => ( is => 'ro' , isa => 'Str', default => 'My Awesome App!' );
   
   router as {
-    route '/' => sub { "hello world!" };
-  
     wrap 'Plack::Middleware::Auth::Basic' => (
       authenticator => literal sub {
         my( $user , $pass ) = @_;
         return $user eq 's00per' and $pass eq 's3kr1t';
       },
-      realm => basic_auth_realm ,
+      realm => 'basic_auth_realm',
     );
+  
+    route '/' => sub { "hello world!" };
   };
 
 =end vim 
@@ -120,6 +120,15 @@ unauthenticated access for C</>.
   use HTTP::Throwable::Factory qw/ http_throw /;
 
   router as {
+    wrap 'Plack::Middleware::Session' =>( store => literal( 'File' ));
+
+    wrap 'Plack::Middleware::Auth::Form' => (
+      authenticator => literal( sub {
+        my( $user , $pass ) = @_;
+        return $user eq 's00per' and $pass eq 's3kr1t';
+      }),
+    );
+
     route '/' => sub { "hello world!" };
 
     route '/admin' => sub {
@@ -133,15 +142,6 @@ unauthenticated access for C</>.
 
       return "admin section!<br/>hello $user!";
     };
-
-    wrap 'Plack::Middleware::Session' =>( store => literal( 'File' ));
-
-    wrap 'Plack::Middleware::Auth::Form' => (
-      authenticator => literal( sub {
-        my( $user , $pass ) = @_;
-        return $user eq 's00per' and $pass eq 's3kr1t';
-      }),
-    );
   };
 
 =end vim
@@ -157,10 +157,10 @@ password, but attempting to load C</admin> should result in you being
 redirected to C</login>, which will display a simple login form.
 
 Looking at the inline sub for the C</admin> route, we see that we're
-looking at the PSGI session hash (available via the C<sesison> method
+looking at the PSGI session hash (available via the C<session> method
 on the C<$request> object that is passed to the action) to see if
 there's a C<user_id> key. If there is, that means we have a logged-in
-user, and can fall pass the conditional and return a string to
+user, and can fall past the conditional and return a string to
 display. If we don't see a value in this key, however, that means we
 don't have a logged in user, and we want to display the login form
 instead. We can easily accomplish this by throwing a
@@ -179,7 +179,7 @@ functionality.)
 =head1 Next steps
 
 When you're ready to move beyond the "prototype" stage of your
-application, you'll find yourself wanting to authentication against
+application, you'll find yourself wanting to authenticate against
 information you've got stored in a database (or another type of data
 store that you've abstracted behind a model-layer module). You'll also
 want a login form that fits into the look-and-feel of the rest of your
