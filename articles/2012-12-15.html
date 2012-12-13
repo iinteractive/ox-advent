@@ -5,7 +5,7 @@ Author: John SJ Anderson <john.anderson@iinteractive.com>
 =head1 Selective Sharing
 
 As we've seen, one of the nice things about the OX framework is how it
-exemplifies and amplifies the whipupitude nature of Perl. It's easy to
+exemplifies and amplifies the whipuptitude nature of Perl. It's easy to
 go from a wild idea to a single file proof-of-concept level
 implementation with OX, and then later refactor that prototype into
 your "real" application.
@@ -47,20 +47,20 @@ authentication can be as simple as:
 
   package MyOXsomeApp;
   use OX;
-  
+
   router as {
     wrap 'Plack::Middleware::Auth::Basic' => (
       authenticator => literal( sub {
-        my( $user , $pass ) = @_;
+        my( $user, $pass ) = @_;
         return $user eq 's00per' and $pass eq 's3kr1t';
-      }),
+      } ),
       realm => literal( "my awesome app!" ),
     );
 
     route '/' => sub { "hello world!" };
   };
 
-=end vim 
+=end vim
 
 The C<realm> option being passed to the middleware is used to control
 what is displayed in the pop-up window that appears when the web
@@ -74,21 +74,25 @@ the L<Plack::Middleware::Auth::Basic> parameters, like so:
   package MyOXsomeApp;
   use OX;
 
-  has basic_auth_realm => ( is => 'ro' , isa => 'Str', default => 'My Awesome App!' );
-  
+  has basic_auth_realm => (
+      is    => 'ro',
+      isa   => 'Str',
+      value => 'My Awesome App!'
+  );
+
   router as {
     wrap 'Plack::Middleware::Auth::Basic' => (
-      authenticator => literal sub {
-        my( $user , $pass ) = @_;
+      authenticator => literal( sub {
+        my ( $user , $pass ) = @_;
         return $user eq 's00per' and $pass eq 's3kr1t';
-      },
+      } ),
       realm => 'basic_auth_realm',
     );
-  
+
     route '/' => sub { "hello world!" };
   };
 
-=end vim 
+=end vim
 
 =for html
 (Note: you can download this application
@@ -120,22 +124,24 @@ unauthenticated access for C</>.
   use HTTP::Throwable::Factory qw/ http_throw /;
 
   router as {
-    wrap 'Plack::Middleware::Session' =>( store => literal( 'File' ));
+    wrap 'Plack::Middleware::Session' => (
+      store => literal( 'File' ),
+    );
 
     wrap 'Plack::Middleware::Auth::Form' => (
       authenticator => literal( sub {
-        my( $user , $pass ) = @_;
+        my ( $user, $pass ) = @_;
         return $user eq 's00per' and $pass eq 's3kr1t';
-      }),
+      } ),
     );
 
     route '/' => sub { "hello world!" };
 
     route '/admin' => sub {
-      my( $request ) = @_;
+      my ( $request ) = @_;
 
       my $user;
-      unless( $user = $request->session->{user_id} ) {
+      unless ( $user = $request->session->{user_id} ) {
         $request->session->{redir_to} = '/admin';
         http_throw( Found => { location => '/login' } );
       }
@@ -164,17 +170,13 @@ user, and can fall past the conditional and return a string to
 display. If we don't see a value in this key, however, that means we
 don't have a logged in user, and we want to display the login form
 instead. We can easily accomplish this by throwing a
-L<HTTP::Throwable> exception. This immediately exits the current
-subroutine and returns an object that results in a redirect being
-issued in the browser, so the login form is loaded.
+L<HTTP::Throwable> exception, as described in Monday's article.
 
-### FIXME: that last sentence needs help.... 
-
-(I<N.b.>, if you were implementing this type of authentication in a
-real application, you'd want to wrap up the code that checks for an
+(I<N.B.>, if you were implementing this type of authentication in a
+real application, you'd want to either wrap up the code that checks for an
 active user and issues a redirect to C</login> inside a role that
 could be consumed by controller modules that needed this
-functionality.)
+functionality, or implement the logic as a middleware.)
 
 =head1 Next steps
 
@@ -189,3 +191,4 @@ want to drop L<Plack::Middleware::Auth::Form> in favor of your own
 code. We'll leave that step as an exercise for the reader (at least
 for the moment...)
 
+=cut
