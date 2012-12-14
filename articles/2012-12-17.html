@@ -1,0 +1,200 @@
+Title: Custom Route Builders
+Topic: OX
+Author: Jesse Luehrs <jesse.luehrs@iinteractive.com>
+
+=head1 Route builders
+
+As mentioned previously, route builders handle parsing the action spec to
+determine what code to run when a route is matched. Although OX comes with some
+default route builders, you can also write your own to handle other kinds of
+action specs.
+
+B<A note beforehand:> this API is a lot less finalized and more experimental
+than many of the other parts discussed so far, and may change in the future. It
+is a useful piece of functionality however, and still worth discussing even if
+the details may change later.
+
+=head2 OX::RouteBuilder
+
+A route builder is implemented via a class which consumes the
+L<OX::RouteBuilder> role. This role requires two methods:
+
+=over 4
+
+=item *
+
+C<parse_action_spec>
+
+This is a class method which is called when OX attempts to parse an action
+spec. If the action spec should be handled by this route builder, this method
+should return a value containing the parsed data (to be used later). Otherwise,
+it should return C<undef>. OX will call the C<parse_action_spec> method on all
+enabled route builders to find the one that doesn't return C<undef>, and that
+one will be instantiated with the route data.
+
+=item *
+
+C<compile_routes>
+
+This method is called on the instantiated route builder, and is used to turn
+the route description into actual route data. You can access the route data via
+the C<path>, C<route_spec>, and C<params> attributes. C<path> is the path given
+as the first argument of the C<route> statement, C<route_spec> is the value
+that C<parse_action_spec> returned, and C<params> is a hashref of the
+parameters given at the end of the route statement. The parameters can be split
+into defaults and validations by calling the
+C<extract_defaults_and_validations> method. The C<compile_routes> method should
+return a hashref containing keys for C<path>, C<target>, C<defaults>, and
+C<validations>.
+
+=back
+
+This is perhaps more clear with an example. Here is a route builder which
+parses action specs of the form:
+
+=begin vim perl
+
+  {
+      GET  => sub { ... },
+      POST => sub { ... },
+      '*'  => sub { ... },
+  }
+
+=end vim
+
+In other words, a hashref mapping HTTP methods to code to run for those methods.
+
+=begin vim perl
+
+  package MyApp::RouteBuilder::HTTPMethodCode;
+  use Moose;
+
+  with 'OX::RouteBuilder';
+
+  sub parse_action_spec {
+      my $class = shift;
+      my ($action_spec) = @_;
+
+      return unless ref($action_spec) eq 'HASH';
+      return $action_spec;
+  }
+
+  sub compile_routes {
+      my $self = shift;
+
+      my ($defaults, $validations) = $self->extract_defaults_and_validations(
+          $self->params
+      );
+
+      my $actions = $self->route_spec;
+      my $target = sub {
+          my $r = shift;
+
+          return $actions->{$r->method}->($r)
+              if exists $actions->{$r->method};
+
+          return $actions->{'*'}->($r)
+              if exists $actions->{'*'};
+
+          my @allowed = exists $actions->{'*'}
+              ? (qw(OPTIONS GET HEAD POST PUT DELETE TRACE CONNECT))
+              : (keys %$actions);
+          return [
+              405,
+              [
+                  'Content-Type' => 'text/plain',
+                  'Allow'        => join(",", @allowed),
+              ],
+              [ "Method " . $r->method . " not allowed" ]
+          ];
+      };
+
+      return {
+          path        => $self->path,
+          target      => $target,
+          defaults    => $defaults,
+          validations => $validations,
+      };
+  }
+
+=end vim
+
+So going through this a piece at a time, we first have the C<parse_action_spec>
+method. This will match any action spec which is a hashref, as in the case of a
+route that looks like
+
+=begin vim perl
+
+  route '/posts' => { GET => sub { ... }, POST => sub { ... } };
+
+=end vim
+
+It returns the action spec as-is to be used later, since nothing about it needs
+to be parsed out.
+
+Next, we have the C<compile_routes> method. The first thing it does is extract
+the defaults and validations from the given params. Validations are params
+whose values are hashrefs with an C<isa> key, and defaults are params whose
+values are strings. If you want to add any additional defaults, you can also do
+that at this point (adding a value for C<name> is often a useful thing to do in
+cases where there is a natural default to use for it, since it will make using
+C<uri_for> easier, as described in a previous article).
+
+It then creates the target coderef. This is the code which will be called as
+the action for the route. It receives an L<OX::Request> object as its only
+parameter, and returns some kind of response. Here, it looks at the request to
+see what HTTP method it was given, and sees if there is a corresponding action
+to use for it. If there is, it calls that action with the request object. If
+there isn't, it looks for a key of C<'*'> as a fallback. If that doesn't exist
+either, it returns a valid C<405 Method Not Allowed> error response.
+
+Finally, it returns the hashref containing all of the data it has assembled.
+
+=head1 Using custom route builders
+
+So now we have our custom route builder, but how do we use it? By default if
+nothing is specified, OX uses the L<OX::RouteBuilder::Code>,
+L<OX::RouteBuilder::ControllerAction>, and L<OX::RouteBuilder::HTTPMethod>
+route builders. To specify an alternate set of route builders to use, you
+provide them in an arrayref as the first argument to the C<router> block:
+
+=begin vim perl
+
+  router [
+      'OX::RouteBuilder::ControllerAction',
+      'MyApp::RouteBuilder::HTTPMethodCode',
+  ] => as {
+      route '/'      => 'root.index';
+      route '/posts' => { GET => sub { ... }, POST => sub { ... } };
+  };
+
+=end vim
+
+Note that this replaces the default list rather than appending to it. This way,
+you can provide your own interpretation of things that the default route
+builders would otherwise handle, without things getting confused.
+
+=head2 Nested routers
+
+In the case of nested routers, the default set of route builders is taken from
+the enclosing router if nothing is specified, rather than always using the base
+default. For instance:
+
+=begin vim perl
+
+  router [
+      'OX::RouteBuilder::ControllerAction',
+      'MyApp::RouteBuilder::HTTPMethodCode',
+  ] => as {
+      route '/'      => 'root.index';
+      mount '/posts' => router as {
+          route '/' => { GET => sub { ... }, POST => sub { ... } };
+      };
+  };
+
+=end vim
+
+Here, the second C<route> statement works properly, because the router mounted
+at C</posts> uses the same list of route builders as its parent.
+
+=cut
