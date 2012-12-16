@@ -1,0 +1,458 @@
+Title: Authentication And Authorization
+Topic: OX
+Author: John SJ Anderson <john.anderson@iinteractive.com>
+
+=head1 Big Kid Pants
+
+At some point during the development of your application, the simple
+authentication options that were discussed earlier are going to become
+insufficient. You're going to want real user identities to
+authenticate against, and you're going to want to assign permissions
+within your application based on those accounts.
+
+Time to put on the big kid pants and implement authentication and
+authorization based on information stored in your model layer.
+
+=head1 Database Schema
+
+First, let's figure out our database schema classes. Obviously we're
+going to have C<users> and C<permissions> tables, as well as a
+C<user_permissions> junction table to map between them -- a fairly
+standard setup. Because a minimal DBIC version of this takes up around
+a hundred lines of code, only the
+L<ResultSource|DBIx::Class::ResultSource> file for the C<users> table
+is shown here; the rest of the code can be viewed at
+L<https://github.com/genehack/oxauth>.
+
+=begin vim perl
+
+  package OXauth::Schema::Result::Users;
+  use parent qw/ DBIx::Class::Core /;
+  
+  use strict;
+  use warnings;
+  
+  __PACKAGE__->load_components( qw/ PK::Auto PassphraseColumn / );
+  __PACKAGE__->table( 'users' );
+  
+  __PACKAGE__->add_column(
+    id => {
+      data_type   => 'integer' ,
+      is_nullable => 0
+    } ,
+    username => {
+      data_type   => 'varying character' ,
+      size        => 255 ,
+      is_nullable => 0 ,
+    } ,
+    password => {
+      data_type        => 'text',
+      is_nullable      => 0 ,
+      passphrase       => 'rfc2307' ,
+      passphrase_class => 'BlowfishCrypt' ,
+      passphrase_args  => {
+        salt_random => 1 ,
+        cost        => 8 ,
+      },
+      passphrase_check_method => 'check_passphrase' ,
+    } ,
+    name => {
+      data_type   => 'varying character',
+      size        =>  255 ,
+      is_nullable => 1 ,
+    } ,
+  );
+  
+  __PACKAGE__->set_primary_key( qw/ id / );
+  __PACKAGE__->add_unique_constraint([ qw/ username / ]);
+  
+  __PACKAGE__->has_many(
+    user_permissions => 'OXauth::Schema::Result::UserPermissions' => 'user_id'
+  );
+  __PACKAGE__->many_to_many( permissions => user_permissions => 'permission' );
+  
+  sub has_permission_to {
+    my( $self , $query ) = @_;
+  
+    return $self->permissions->search({ name => $query })->count > 0 ? 1 : 0;
+  }
+  
+  1;
+
+=end vim
+
+A few points worth noting:
+
+=over 4
+
+=item *
+
+We're using L<DBIx::Class::PassphraseColumn> to make handling
+passwords easier.
+
+=item *
+
+We defined the appropriate relationships between our tables so that we
+can easily find what permissions a given user has -- but we've gone a
+step further and written a C<has_permission_to> method in the Users
+result class to easily check if a given user has a given
+permission. We'll see this in action later.
+
+=back
+
+(I<N.b.>: If you're looking at the code in the
+L<repository|https://github.com/genehack/oxauth>, there's a simple
+script in C<bin/deploy> that will create a SQLite database with some
+sample data.)
+
+=head1 Application
+
+Now that we've got the schema, let's see how it fits into our L<OX>
+application.
+
+=begin vim perl
+
+  package OXauth;
+  # ABSTRACT: OX advent auth example
+  use OX;
+  use 5.010;
+  
+  use OXauth::Schema;
+  
+  has connect_info => ( is => 'ro', isa => 'ArrayRef' , required => 1 );
+  
+  has model => (
+    is           => 'ro' ,
+    isa          => 'OXauth::Schema' ,
+    dependencies => [ 'connect_info' ] ,
+    lifecycle    => 'Singleton' ,
+    block        => sub {
+      OXauth::Schema->connect( @{ shift->param( 'connect_info' )} )
+    } ,
+  );
+  
+  has cache_dir     => ( is => 'ro' , isa => 'Str' , required => 1 );
+  has template_root => ( is => 'ro' , isa => 'Str' , required => 1 );
+  
+  has view => (
+    is           => 'ro' ,
+    isa          => 'Text::Xslate' ,
+    dependencies => {
+      cache_dir => 'cache_dir' ,
+      path      => 'template_root' ,
+    },
+  );
+  
+  has admin_controller => (
+    is    => 'ro' ,
+    isa   => 'OXauth::Controller::Admin' ,
+    infer => 1 ,
+  );
+  
+  has auth_controller => (
+    is    => 'ro' ,
+    isa   => 'OXauth::Controller::Auth' ,
+    infer => 1 ,
+  );
+  
+  has root_controller => (
+    is    => 'ro',
+    isa   => 'OXauth::Controller::Root' ,
+    infer => 1 ,
+  );
+  
+  router as {
+    wrap 'Plack::Middleware::Session' => ( store => literal( 'File' ));
+  
+    route '/'       => 'root_controller.index';
+    route '/login'  => 'auth_controller.login';
+    route '/logout' => 'auth_controller.logout';
+    route '/admin'  => 'admin_controller.index';
+    route '/denied' => 'root_controller.deny';
+  };
+  
+  __PACKAGE__->meta->make_immutable;
+  1;
+  
+=end vim 
+
+=head1 Those Who Know Me Have No Need Of My Name
+
+The C<auth_controller> service, an instance of
+C<OXauth::Controller::Auth>, is where all the authentication code
+lives. Let's see what that looks like:
+
+=begin vim perl
+
+  package OXauth::Controller::Auth;
+  use Moose;
+  extends 'OXauth::Controller';
+  
+  use HTTP::Throwable::Factory qw/ http_throw /;
+  
+  sub login {
+    my( $self , $req ) = @_;
+  
+    my $login_error;
+  
+    my $username = $req->param( 'username' ) // '';
+  
+    if ( $req->method eq 'POST' ) {
+      my $user = $self->model->resultset('Users')->find({ username => $username });
+      if ( $user and $user->check_passphrase( $req->param( 'password' ))) {
+        $req->session->{user_id} = $username;
+  
+        my $redir = delete $req->session->{redir_to};
+        $redir //= '/';
+  
+        http_throw( Found => { location => $redir });
+      }
+      else { $login_error = 'Wrong user or password' }
+    }
+  
+    return $self->render(
+      'login.tx' , {
+        error    => $login_error ,
+        title    => 'Login' ,
+        username => $username
+      });
+  }
+  
+  sub logout {
+    my( $self , $req ) = @_;
+  
+    delete $req->session->{user_id}
+      if ( $req->method eq 'POST' );
+  
+    http_throw( SeeOther => { location => '/' });
+  }
+  
+  __PACKAGE__->meta->make_immutable;
+  1;
+
+=end vim 
+
+Here we have a fairly standard C<login> method. If it's accessed via a
+GET request, it displays a login form (see below for the template). In
+response to a POST request, it looks for a user with the provided
+username, and, if one is found, checks the provided password against
+the stored one (using the C<check_passphrase> helper method we get
+from L<PassphraseColumn|DBIx::Class::PassphraseColumn>), and if it
+matches, saves the username in the session and issues a redirect to
+the stored redirection location. If any of those steps fails -- we
+didn't get a username, we can't find a user that corresponds to that
+username, or if the C<check_passphrase> method returns false -- we'll
+redisplay the login form (with the previously-provided username filled
+back in, if we can).
+
+Similarly, the C<logout> method removes the logged-user, but only in
+response to a POST request.
+
+Here's the template for the login form:
+
+=begin vim html
+
+  <!DOCTYPE html>
+  <html>
+    <head>
+      <title><: $title :></title>
+    </head>
+    <body>
+      <h1>OXauth <: $title :></h1>
+  
+  : if( $error ) {
+      <h2><span style="background: red; border: 1px solid black; padding: 5px">
+          <: $error :>
+      </span></h2>
+  : }
+      
+      <form id="login_form" method="post" > 
+        <fieldset class="main_fieldset"> 
+          <div>
+            <label class="label" for="username">Username: </label>
+            <input type="text" name="username" id="username" value="<: $username :>" />
+          </div> 
+          <div>
+            <label class="label" for="password">Password: </label>
+            <input type="password" name="password" id="password" value="" />
+          </div> 
+          <div>
+            <input type="submit" name="submit" id="submit" value="Login" />
+          </div> 
+        </fieldset> 
+      </form>
+    </body>
+  </html>
+
+=end vim
+
+(See the documentation for the excellent L<Text::Xslate> if you're
+curious about the non-HTML parts of that template.)
+
+=head1 Reuse Is Made Of Roles
+
+Since we're eventually going to have a number of controllers and
+methods that need to tell whether we have a logged-in user, and what
+permissions that user has, we'll implement the methods for checking
+those in a role that can be composed into whatever controllers need
+it. Here's a basic role that does that:
+
+=begin vim perl
+
+  package OXauth::Role::Auth;
+  use Moose::Role;
+  
+  use HTTP::Throwable::Factory qw/ http_throw /;
+  
+  requires 'load_user_from_session';
+  
+  sub needs_auth {
+    my( $self , $req , $redir ) = @_;
+  
+    return if $req->session->{user_id};
+  
+    $req->session->{redir_to} = $redir || '/' ;
+    http_throw( Found => { location => '/login' });
+  }
+  
+  sub needs_perm {
+    my( $self , $req , $perm , $redir ) = @_;
+  
+    $self->needs_auth( $req , $redir );
+  
+    my $user = $self->load_user_from_session( $req->session );
+  
+    return if $user->has_permission_to( $perm );
+  
+    http_throw( Found => { location => '/denied' });
+  }
+  
+  1;
+
+=end vim
+
+Note that in both cases, the methods simply return if the user is
+authenticated, or has the required permission. If that isn't the case,
+the methods throw C<HTTP::Throwable> exceptions that result in
+redirects, either to the page with the login form, or to page that
+gives a 'Permission denied' error message.
+
+Also note that we're finally making use of that C<has_permission_to>
+method that we defined back at the beginning of the article.
+
+=head1 Authentication In Action 
+
+This authentication role can be used in a controller like so:
+
+=begin vim perl
+
+  package OXauth::Controller::Admin;
+  use Moose;
+  extends 'OXauth::Controller';
+  with 'OXauth::Role::Auth';
+  
+  has '+title' => ( default => 'Admin' );
+  
+  around 'index' => sub {
+    my( $orig , $self , $req ) = @_;
+  
+    $self->needs_perm( $req , 'admin' , $req->uri_for( $req->mapping ) );
+  
+    $self->$orig( $req );
+  };
+  
+  __PACKAGE__->meta->make_immutable;
+  1;
+  
+=end vim
+
+And here's the base controller that C<OXauth::Controller::Admin> is based on, which provides the C<title> attribute and C<index> method that the C<Admin> controller is extending:
+
+=begin vim perl
+
+  package OXauth::Controller;
+  # ABSTRACT: OXauth Base controller
+  use Moose;
+  use 5.010;
+  
+  has title => (
+    is  => 'ro' ,
+    isa => 'Str'
+  );
+  
+  has model => (
+    is       => 'ro' ,
+    isa      => 'OXauth::Schema',
+    handles  => [ qw/ load_user_from_session / ] ,
+    required => 1 ,
+  );
+  
+  has view => (
+    is       => 'ro' ,
+    isa      => 'Text::Xslate' ,
+    handles  => [ qw/ render / ] ,
+    required => 1 ,
+  );
+  
+  sub index {
+    my( $self , $req ) = @_;
+  
+    return $self->render( 'index.tx' , {
+      title => $self->title ,
+      user  => $req->session->{user_id} ,
+    });
+  }
+  
+  __PACKAGE__->meta->make_immutable;
+  1;
+  
+=end vim
+
+Some things to note about the authentication role and the controllers: 
+
+=over 4
+
+=item *
+
+Because these are just normal Moose classes, we can trivially use a
+method modifier in the subclass to add a requirement for a user with a
+particular set of permissions. The C<needs_perm> method will throw an
+exception if there isn't a logged-in user, or if the user doesn't have
+the right permission set, so our flow control remains simple.
+
+=item *
+
+We require the C<view> and C<model> attributes of
+C<OXauth::Controller> so that we can use the C<infer> option in our
+L<OX> application class (instead of supplying explicit deps).
+
+=item *
+
+Rather than hardcoding a URL as the third parameter to the
+C<needs_perm> method, we use the C<uri_for> and C<mapping> methods of
+the L<OX::Request> object we're passed to effectively say, "Send us
+back to the same URL we're at now". (Exploiting the ability to do this
+to turn this role into an even-more generic service is left as an
+exercise for the reader.)
+
+=back
+
+=head1 Putting It All Together
+
+If you check out the L<repository|https://github.com/genehack/oxauth>
+and install any dependencies you're missing (which can do by running
+C<cpanm Dist::Zilla && dzil listdeps | cpanm> from the root of the
+checked-out repository), you can generate a test SQLite database with
+the C<bin/deploy> script. Once that's done, you can run the app via
+the standard C<plackup app.psgi> invocation. Navigate to
+C<http://localhost:5000/> and select the "Admin" link, and you will be
+sent to a standard login form. Provide one of the username/password
+combinations you'll find in the C<bin/deploy> script, and you should
+be redirected appropriately
+-- to C</admin> if the user you selected has the "admin" permission,
+or to C</denied> if the user does not (or, perhaps, back to the login
+form with an error message if you made a typo).
+
+
+
+
