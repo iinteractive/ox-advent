@@ -1,0 +1,110 @@
+Title: Under the Hood
+Topic: OX
+Author: Jesse Luehrs <jesse.luehrs@iinteractive.com>
+
+=head1 OX::Application
+
+Although L<OX> provides a useful sugar layer for writing your applications, it
+is really just a thin layer on top of an extensible internal structure. Much
+like Moose and Bread::Board, learning how the internals work can open up a lot
+more power to your applications.
+
+=head2 Bread::Board::Container
+
+An OX application is, fittingly, an instance of L<OX::Application>.
+OX::Application is just a
+L<Bread::Board container class|Bread::Board::Container> with a service named
+C<App>, representing the final PSGI application coderef (in fact,
+C<< $app->to_app >> is just a wrapper around
+C<< $app->resolve(service => 'App') >>). This means that you can do anything
+with your OX applications that you would with any other Bread::Board container,
+such as include them in other Bread::Board containers, if your app is larger
+than just a web application.
+
+The C<App> service is a block injection service, whose body just calls the
+C<build_app> method on the application object itself. This means that defining
+your application is as simple as writing a C<build_app> method. The C<App>
+service also gets its dependencies via the C<app_dependencies> method. The
+service itself, in L<Bread::Board> syntax, basically looks like this:
+
+=begin vim perl
+
+  service App => (
+      block => sub {
+          my $s = shift;
+          my $app = $self->build_app($s);
+          # apply middleware to $app using $s->param('Middleware')
+          return $app
+      },
+      dependencies => {
+          Middleware => 'Middleware',
+          %{ $self->app_dependencies },
+      }
+  );
+
+=end vim
+
+As you can see, this supports declaring middleware via an additional
+C<Middleware> service. This service is expected to create an arrayref of
+middleware, and is created similarly to the C<App> service, via
+C<build_middleware> and C<middleware_dependencies> methods.
+
+=head2 Features added by the OX sugar
+
+In addition, the OX sugar provides a default implementation of C<build_app>
+that uses an additional C<Router> service. The C<Router> service again is
+created via methods on the application class, via C<build_router> and
+C<router_dependencies>. Since the router is an object, creating the object
+itself is usually always done the same way, the only difference being the
+routes that are added to it. To make this process easier, the C<Router> service
+is created slightly differently - C<build_router> has a default implementation
+that constructs a router object using the C<router_class> method and the
+dependencies specified in C<router_dependencies>, and then it calls
+C<configure_router>, passing the constructed router object in.
+
+The default C<build_app> implementation then calls the C<app_from_router>
+method to turn the router object into a PSGI application. It also replaces the
+app with a L<Plack::App::URLMap> which has the initial app mounted at C<'/'> if
+any mounts were declared.
+
+=head1 Roles as plugins
+
+The upshot to this is, OX has no explicit plugin interface. Most plugin-like
+behavior can already be provided via middleware (as we've already seen), and
+anything that can't be done that way can instead be done by just writing normal
+roles to be applied to the application class.
+
+For instance, if you (for some reason) want to interpret your requests and
+responses as Windows-1252 instead of UTF-8, you can do this:
+
+=begin vim perl
+
+  package MyApp::Request;
+  use Moose;
+
+  extends 'OX::Request';
+
+  sub default_encoding { 'Windows-1252' }
+
+  package MyApp::Role::Windows1252;
+  use Moose::Role;
+
+  sub request_class { 'MyApp::Request' }
+
+  package MyApp;
+  use OX;
+
+  with 'MyApp::Role::Windows1252';
+
+  # ...
+
+=end vim
+
+Here, we override the request class for the application to use our custom
+request class, which has a different value for C<default_encoding>. Any of the
+other methods mentioned in this article can also be overridden in similar ways.
+See the documentation for L<OX::Application> for more details, as well as
+L<OX::Application::Role::Router> and L<OX::Application::Role::Request> which
+are applied to your class by default when you C<use OX>.
+
+=cut
