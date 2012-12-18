@@ -1,6 +1,54 @@
-Title: Scripts outside of OX
+Title: OX off the Web
 Topic: OX
 Author: Shawn M Moore <shawn.moore@iinteractive.com>
 
-A web application often does more than simply wait for HTTP requests and serve them. There are periodic tasks managed by C<cron>, deferred job-queue tasks managed by L<TheSchwartz> or C<q4m> or thier ilk, simple administrative scripts, and so on. You certainly want to reuse the code from your application in these external tools, but if they exist outside the HTTP request lifecycle, how do you achieve that?
+Web applications of respectable size often do more than simply wait for HTTP requests and serve them. There are periodic tasks managed by C<cron>. You might defer long-running tasks with a job queue managed by L<TheSchwartz>, or C<q4m>, or any of their ilk. Some applications have their administration features written as scripts in a C<bin/> directory. Maybe some low-level tests if you're lucky? You certainly want to reuse the code from your application in these external tools, but if the tools must exist outside the HTTP request lifecycle, how do you achieve that?
+
+You can easily do all these things and more because L<OX> is built on top of L<Bread::Board>, which as you've been discovering these twenty-four days of Advent, is a wonderful substrate for writing applications. With L<OX>, you have complete managerial control of your application; it's not hiding inside some shell of a web framework.
+
+=head2 Your PSGI file
+
+The first stop on our journey is investigating the C<.psgi> file you're using to run your application. It probably looks something like this:
+
+=begin vim perl
+
+    use 5.16.0;
+    use warnings;
+    use MyApp;
+    
+    MyApp->new->to_app;
+
+=end vim
+
+That C<to_app> method call returns a PSGI-complaint coderef so that your application can serve web requests. No problem. But notice what C<to_app> is being called on: an instance of C<MyApp>. Since you have an instance of your application, you can of course call any methods you've written, but the real power is that you can pull out the L<Bread::Board> services your application declares.
+
+=head2 Administrative scripts
+
+Let's put that to the test. Say our application has users and we need a script to manage them. Specifically we're going to take a user ID as input and promote that user to a Pro account. Here's what that script might look like:
+
+=begin vim perl
+
+    use 5.16.0;
+    use warnings;
+    use MyApp;
+    
+    @ARGV == 1 or die "usage: $0 userid\n";
+    my $id = shift;
+    
+    my $app = MyApp->new;
+    my $model = $app->model;
+    my $user = $model->get_user($id);
+    if ($user) {
+        $user->is_pro(1);
+        say "Promoted " . $user->email . " to Pro.";
+    }
+    else {
+        die "Can't find user $id";
+    }
+
+=end vim
+
+That's all! It's perfectly straightforward code.
+
+We did not need to explicitly tell OX to initialize the C<model> service, since the C<model> accessor that L<Bread::Board::Declare> generates for C<MyApp> will initialize it for you. And of course we did not need to write the code to actually initialize the C<model> service; it's already there in your application class. L<OX> did I<not> needlessly initialize anything else in the application. Since we're just printing simple output for the sysadmin to confirm that the intended user was upgraded, we did not need to fire up the HTML rendering engine.
 
