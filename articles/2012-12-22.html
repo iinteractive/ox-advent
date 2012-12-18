@@ -2,13 +2,13 @@ Title: OX off the Web
 Topic: OX
 Author: Shawn M Moore <shawn.moore@iinteractive.com>
 
-Web applications of respectable size often do more than simply wait for HTTP requests and serve them. There are periodic tasks managed by C<cron>. You might defer long-running tasks with a job queue managed by L<TheSchwartz>, or C<q4m>, or any of their ilk. Some applications have their administration features written as scripts in a C<bin/> directory. Maybe some low-level tests if you're lucky? You certainly want to reuse the code from your application in these external tools, but if the tools must exist outside the HTTP request lifecycle, how do you achieve that?
+Web applications of respectable size often do more than simply wait for HTTP requests and serve them. There are periodic tasks managed by C<cron>. You might defer long-running, asynchronous tasks with a job queue managed by L<TheSchwartz>, or C<q4m>, or any of their ilk. Some applications have their administration features written as scripts in a C<bin/> directory. Maybe the application even has some low-level tests too (...if you're lucky!). You certainly want to reuse the code from your application in these external tools, but if the tools must exist outside the HTTP request lifecycle, how do you achieve that?
 
-You can easily do all these things and more because L<OX> is built on top of L<Bread::Board>, which as you've been discovering these twenty-four days of Advent, is a wonderful substrate for writing applications. With L<OX>, you have complete managerial control of your application; it's not hiding inside some shell of a web framework.
+You can easily do all these things and more because L<OX> is built on top of L<Bread::Board>, which as you've been discovering these twenty-four days of Advent, is a wonderful substrate for building applications. With L<OX>, you have complete control of your application; it's not hiding inside some shell of a web framework that begrudgingly gives you access to only some of your hard-earned code.
 
 =head2 Your PSGI file
 
-The first stop on our journey is investigating the C<.psgi> file you're using to run your application. It probably looks something like this:
+The first stop on our journey is investigating the C<.psgi> file you use to run your application. It probably looks something like this:
 
 =begin vim perl
 
@@ -20,7 +20,7 @@ The first stop on our journey is investigating the C<.psgi> file you're using to
 
 =end vim
 
-That C<to_app> method call returns a PSGI-complaint coderef so that your application can serve web requests. No problem. But notice what C<to_app> is being called on: an instance of C<MyApp>. Since you have an instance of your application, you can of course call any methods you've written, but the real power is that you can pull out the L<Bread::Board> services your application declares.
+That C<to_app> method call returns a PSGI-complaint coderef so that your application can serve web requests. No problem. But notice what C<to_app> is being called on: an instance of C<MyApp>. Since you have an instance of your application, you can of course call any methods you've written in that class. But the real power is that you can also pull out the L<Bread::Board> services your application declares.
 
 =head2 Administrative scripts
 
@@ -35,9 +35,10 @@ Let's put that to the test. Say our application has users and we need a script t
     @ARGV == 1 or die "usage: $0 userid\n";
     my $id = shift;
     
-    my $app = MyApp->new;
+    my $app   = MyApp->new;
     my $model = $app->model;
-    my $user = $model->get_user($id);
+    my $user  = $model->get_user($id);
+    
     if ($user) {
         $user->is_pro(1);
         say "Promoted " . $user->email . " to Pro.";
@@ -48,7 +49,50 @@ Let's put that to the test. Say our application has users and we need a script t
 
 =end vim
 
-That's all! It's perfectly straightforward code.
+That's all! It's perfectly straightforward code. Instantiate the application, use its C<model> service, and go from there.
 
-We did not need to explicitly tell OX to initialize the C<model> service, since the C<model> accessor that L<Bread::Board::Declare> generates for C<MyApp> will initialize it for you. And of course we did not need to write the code to actually initialize the C<model> service; it's already there in your application class. L<OX> did I<not> needlessly initialize anything else in the application. Since we're just printing simple output for the sysadmin to confirm that the intended user was upgraded, we did not need to fire up the HTML rendering engine.
+We did not need to explicitly tell OX to initialize the C<model> service, since the C<model> accessor that L<Bread::Board::Declare> generates for C<MyApp> will initialize the model object for you. And of course we did not need to write the code to actually initialize the C<model> service; that code is already there in your application class. As a fringe benefit, L<OX> did I<not> needlessly initialize anything else in the application. Since we're just printing simple output for the sysadmin to confirm that the intended user was upgraded, we did not need to fire up the HTML rendering engine. That means you don't have to initialize any of the view's dependencies, which might require some constructor parameters or config. How annoying would that be if you had to pass in a C<view_root> directory constructor parameter even though you weren't rendering anything?
 
+=head2 Job queue
+
+Given that you can reuse any of the services that your application uses, it's pretty easy to sally forth and write any kind of script you need to support your application. Let's extend the previous example a little bit to notify the user over email that they were unexpectedly promoted.
+
+We want to decouple the action that caused the email (the Pro upgrade) from actually going through the motions of sending out that mail, so we'll queue up a notification by adding a job to our job queue. That way, we can have retry logic if there was a temporary delivery failure, we can scale out to multiple servers, we can manage what rate we're pushing out email, and so on. The details of using a job queue are way beyond the scope of this article, and they'll differ greatly based on which backend you choose, but I'll try to give the flavor of the thing here. Most importantly, you can go ahead and give your application some kind of C<job_queue> service. Now everything from the model to the view to external scripts can put jobs into that queue just by declaring a dependency on that C<job_queue> service. You'd then write some other script that processes jobs in the queue just by interacting with C<MyApp>'s C<job_queue>. Those jobs can also of course use any dependencies they need, such as the model for pulling more data out of the database, or the view for generating nicely formatted HTML mail. It's all right there hanging off C<MyApp>.
+
+Let's extend the script to put a job in our shiny new queue. All that's changing is we're using C<MyApp>'s C<job_queue> service and calling C<add_job> on it.
+
+=begin vim perl
+
+    use 5.16.0;
+    use warnings;
+    use MyApp;
+    
+    @ARGV == 1 or die "usage: $0 userid\n";
+    my $id = shift;
+    
+    my $app   = MyApp->new;
+    my $model = $app->model;
+    my $queue = $app->job_queue;
+    my $user  = $model->get_user($id);
+    
+    if ($user) {
+        $user->is_pro(1);
+
+        $queue->add_job(
+            type      => 'ProUpgradeNotification',
+            recipient => $user,
+        );
+
+        say "Promoted " . $user->email . " to Pro.";
+    }
+    else {
+        die "Can't find user $id";
+    }
+
+=end vim
+
+Again, it can't really get any easier.
+
+Because L<OX> takes care of initializing your dependencies, you don't need to worry about setting up the job queue with a database handle or any other configuration. This sort of thing is why they say dependency injection is like the inverse of garbage collection: You can just use it and go on your merry way without having to worry about the details of hooking everything up correctly (just like garbage collection frees you from having to micromanage object lifecycles). If MyApp's C<model> service is a C<Singleton>, and the C<job_queue> service requires it, then your C<$model> and C<$queue>'s model will actually be the same object. That way you don't end up with two database handles. You need to specify that dependency only B<once>: when you declare the C<job_queue> service in C<MyApp>.
+
+The salient point with all of this is that your application is not some sacrosanct, monolithic HTTP engine. You can mix and match the components you need and L<OX> will manage all the dependency resolution for you. No longer do you need to implement a tenth of a dependency injection system in every external script you write. I know from time served in older web frameworks that this was a major pain point, for me at least, so I'm thrilled that L<OX> makes this kind of thing so simple it's I<obvious>.
