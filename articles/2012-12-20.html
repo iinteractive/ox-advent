@@ -87,6 +87,12 @@ and then supplied to your controller class as needed:
 
   extends 'KiokuX::Model';
 
+  sub user_count {
+      my $self = shift;
+      my @users = $self->search({ class => 'MyApp::User' })->all;
+      return scalar(@users);
+  }
+
   sub add_user {
       my $self = shift;
       my (@args) = @_;
@@ -108,7 +114,12 @@ and then supplied to your controller class as needed:
       required => 1,
   );
 
-  sub index { "Hello world!" }
+  sub index {
+      my $self = shift;
+      my ($r) = @_;
+
+      return "Users: " . $self->model->user_count;
+  }
 
   sub register {
       my $self = shift;
@@ -148,9 +159,11 @@ and then supplied to your controller class as needed:
 
 =end vim
 
-Nothing OX-specific is required in your model class, which makes it trivial to
-reuse in any other situations where you may need to access your data model
-outside of a web request (which we'll see more about tomorrow).
+Unlike other frameworks which require writing special adaptor classes in order
+to use your application component classes, nothing OX-specific is required in
+your model class, which makes it trivial to reuse in any other situations where
+you may need to access your data model outside of a web request (which we'll
+see more about tomorrow).
 
 =head1 Views
 
