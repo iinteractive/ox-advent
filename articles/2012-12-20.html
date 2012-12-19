@@ -37,9 +37,9 @@ possible:
       my $self = shift;
       my ($r) = @_;
 
-      my ($hello) = $self->dbh->selectrow_array('SELECT * FROM hello');
+      my ($count) = $self->dbh->selectrow_array('SELECT COUNT(*) FROM users;');
 
-      return "Hello world: $hello";
+      return "Users: $count";
   }
 
   package MyApp;
