@@ -216,8 +216,9 @@ necessary by adjusting the router block:
   
 =end vim 
 
-After updating any hard-coded template URLs, the application will
-continue to function identically, with no other code changes
+Since you're undoubtably using C<uri_for> in your templates as well,
+those will also automatically reflect this change, and the application
+will continue to function identically, with no other code changes
 needed. This should emphasize how the flexible mapping between URL
 routes and methods called on resolved services, along with the
 name-based lookups available via the C<uri_for> method, makes it
