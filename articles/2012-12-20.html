@@ -1,0 +1,326 @@
+Title: Models and Views
+Topic: OX
+Author: Jesse Luehrs <jesse.luehrs@iinteractive.com>
+
+=pod
+
+Applications can be structured in many different ways, but the vast majority of
+web applications use some variation of the
+L<Model-View-Controller|http://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93controller>
+pattern (the
+L<Model-View-Presenter|http://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93presenter>
+pattern being the most common). We've already seen how controllers work in OX,
+and now we'll see how models and views can work.
+
+The main point to take away from this is that application components in OX are
+very free-form. No framework-specific parts are necessary in order to make your
+classes work with OX - everything is just accessible through Bread::Board.
+
+=head1 Models
+
+The model layer is your interface to whatever storage you're using. At the most
+basic level (for database storage anyway), this can just be a raw database
+handle returned from C<< DBI->connect >>. Using this as your model is entirely
+possible:
+
+=begin vim perl
+
+  package MyApp::Controller::Root;
+  use Moose;
+
+  has dbh => (
+      is       => 'ro',
+      required => 1,
+  );
+
+  sub index {
+      my $self = shift;
+      my ($r) = @_;
+
+      my ($hello) = $self->dbh->selectrow_array('SELECT * FROM hello');
+
+      return "Hello world: $hello";
+  }
+
+  package MyApp;
+  use OX;
+
+  has dsn => (
+      is      => 'ro',
+      isa     => 'Str',
+      default => 'dbi:SQLite::memory:',
+  );
+
+  has dbh => (
+      is           => 'ro',
+      dependencies => ['dsn'],
+      block        => sub {
+          my $s = shift;
+          return DBI->connect($s->param('dsn'));
+      },
+  );
+
+  has root => (
+      is           => 'ro',
+      isa          => 'MyApp::Controller::Root',
+      dependencies => ['dbh'],
+  );
+
+  router as {
+      route '/' => 'root.index';
+  };
+
+=end vim
+
+As your application grows, however, you're likely to want to package up your
+model in a class that encapsulates the common operations you need to perform on
+your data. For instance, if your data is stored in L<KiokuDB>, you'll likely
+have a subclass of L<KiokuX::Model>. If you're using L<DBIx::Class>, you'll
+likely have a subclass of L<DBIx::Class::Schema>. These classes can be written
+entirely separately from OX, just providing an interface to access your data,
+and then supplied to your controller class as needed:
+
+=begin vim perl
+
+  package MyApp::Model;
+  use Moose;
+
+  extends 'KiokuX::Model';
+
+  sub add_user {
+      my $self = shift;
+      my (@args) = @_;
+
+      my $user = MyApp::User->new(@args);
+      $self->txn_do(sub {
+          $self->insert($user);
+      });
+
+      return $user;
+  }
+
+  package MyApp::Controller::Root;
+  use Moose;
+
+  has model => (
+      is       => 'ro',
+      isa      => 'MyApp::Model',
+      required => 1,
+  );
+
+  sub index { "Hello world!" }
+
+  sub register {
+      my $self = shift;
+      my ($r) = @_;
+
+      my $name = $r->param('name');
+      $self->model->add_user(name => $name);
+
+      return $r->new_response->redirect($r->uri_for('root.index'));
+  }
+
+  package MyApp;
+  use OX;
+
+  has dsn => (
+      is      => 'ro',
+      isa     => 'Str',
+      default => 'dbi:SQLite::memory:',
+  );
+
+  has model => (
+      is           => 'ro',
+      isa          => 'MyApp::Model',
+      dependencies => ['dsn'],
+  );
+
+  has root => (
+      is    => 'ro',
+      isa   => 'MyApp::Controller::Root',
+      infer => 1,
+  );
+
+  router as {
+      route '/'         => 'root.index';
+      route '/register' => 'root.register';
+  };
+
+=end vim
+
+Nothing OX-specific is required in your model class, which makes it trivial to
+reuse in any other situations where you may need to access your data model
+outside of a web request (which we'll see more about tomorrow).
+
+=head1 Views
+
+Similar to the section on models, a view is just any object that handles the
+generation of content to be displayed to the end user. Typically this will be
+something to generate HTML, but things like L<JSON> and
+L<Excel files|Spreadsheet::WriteExcel> are also not unreasonable. Again as
+above, simple applications can just use content generation classes directly:
+
+=begin vim perl
+
+  package MyApp::Controller::Root;
+  use Moose;
+
+  has xslate => (
+      is       => 'ro',
+      isa      => 'Text::Xslate',
+      required => 1,
+  );
+
+  sub index {
+      my $self = shift;
+      my ($r) = @_;
+
+      return $self->xslate->render('index.tx', {});
+  }
+
+  package MyApp;
+  use OX;
+
+  has xslate => (
+      is  => 'ro',
+      isa => 'Text::Xslate',
+  );
+
+  has root => (
+      is           => 'ro',
+      isa          => 'MyApp::Controller::Root',
+      dependencies => ['xslate'],
+  );
+
+  router as {
+      route '/' => 'root.index';
+  };
+
+=end vim
+
+But writing a custom view class to handle your application's needs is also
+possible:
+
+=begin vim perl
+
+  package MyApp::View;
+  use Moose;
+
+  has template_root => (
+      is       => 'ro',
+      isa      => 'Str',
+      required => 1,
+  );
+
+  has xslate => (
+      is      => 'ro',
+      isa     => 'Text::Xslate',
+      lazy    => 1,
+      default => sub {
+          my $self = shift;
+          return Text::Xslate->new(
+              path     => [ $self->template_root ],
+              function => {
+                  uri_for => sub {
+                      my ($r, $spec) = @_;
+                      return $r->uri_for($spec);
+                  },
+              },
+          );
+      },
+  );
+
+  sub render_page {
+      my $self = shift;
+      my ($r, $page) = @_;
+      return $self->render("$page.tx", { r => $r });
+  }
+
+  package MyApp::Controller::Root;
+  use Moose;
+
+  has view => (
+      is       => 'ro',
+      isa      => 'MyApp::View',
+      required => 1,
+  );
+
+  sub index {
+      my $self = shift;
+      my ($r) = @_;
+
+      return $self->view->render_page($r, 'index');
+  }
+
+  package MyApp;
+  use OX;
+
+  has template_root => (
+      is    => 'ro',
+      isa   => 'Str',
+      value => 'root/templates',
+  );
+
+  has view => (
+      is           => 'ro',
+      isa          => 'MyApp::View',
+      dependencies => ['template_root'],
+  );
+
+  has root => (
+      is    => 'ro',
+      isa   => 'MyApp::Controller::Root',
+      infer => 1,
+  );
+
+  router as {
+      route '/' => 'root.index';
+  };
+
+=end vim
+
+=head2 Automatic rendering
+
+If you use L<Catalyst>, you're probably familiar with the RenderView action,
+which automatically renders the page associated with the current action. OX
+doesn't have a direct equivalent, but this is just a difference in design
+rather than a lack of features. OX has no equivalent to the Catalyst stash, so
+there's no way to pass template variables except as parameters to the
+subroutine that actually renders the template. In this case,
+C<< $self->view->render($template, { foo => 'bar' }) >> is not particularly
+different from C<< $c->stash->{foo} = 'bar' >>. In the case where you don't
+need to set any variables, however, there is a shortcut you can take.
+
+Recall that OX has no concept of a "view" or a "controller" other than how the
+classes are used. Because of this, we can modify the above example slightly. By
+adding a line to the C<render_page> method like this:
+
+=begin vim perl
+
+  sub render_page {
+      my $self = shift;
+      my ($r, $page) = @_;
+      $page //= $r->mapping->{page};
+      return $self->render("$page.tx", { r => $r });
+  }
+
+=end vim
+
+we can then see that this method looks a lot like an action in a controller
+class. And we can in fact use it like one:
+
+=begin vim perl
+
+  router as {
+      route '/'      => 'root.index';
+      route '/about' => 'view.render_page', (
+          page => 'about',
+      );
+  };
+
+=end vim
+
+In this case, the view can render the page directly - no explicit controller
+needed!
+
+=cut
