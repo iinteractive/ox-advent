@@ -147,7 +147,7 @@ resolution.
   
     my $req = OX::Request->new(env => $env);
   
-    my $login_url = $req->uri_for({action => 'login'});
+    my $login_url = $req->uri_for('login');
   
     # load the user data if there's a user_id set in the session
     if ( my $id = $req->session->{user_id} ) {
@@ -160,9 +160,7 @@ resolution.
     }
     # otherwise redirect to the login url
     else {
-      return http_exception(Found => {
-        location => $login_url,
-      })->as_psgi;
+      return $req->new_response->redirect( $login_url );
     }
   }
   
@@ -180,17 +178,51 @@ information.)
 
 The logic here is very simple -- if there's a C<user_id> key set in
 the session, we load up that user from the database. If there's a user
-in the session or if we're trying to load the login URL, we return a
-PSGI application instance containing the environment -- which will
-allow for further routing or middleware application to happen.
+in the session or if we're trying to load the login URL, we call the
+wrapped PSGI application instance, passing it the environment, and
+return the result -- which will allow for further routing or
+middleware application to happen.
 
-If we don't have a user and aren't trying to login, we instead throw
-an exception that will cause a redirect to the login URL to be issued.
+If we don't have a user and aren't trying to login, we instead
+generate a redirect to the login URL.
 
 All the code for the C<login> and C<logout> methods in
 C<OXauth::Controller::Auth> remains exactly the same as in the earlier
 example (with one tiny addition -- the C<logout> method clears the
 C<user> key in the session hash in addition to C<user_id>.)
+
+=head1 It's A Trap
+
+The more observant may have noticed that the middleware code didn't
+actually need to check for whether the path matched the login URL --
+because the middleware was only wrapped when the path matched
+C</admin>, and the login URL (at C</login>) would never be the path
+while the middleware was executing. We can easily make both checks
+necessary by adjusting the router block:
+
+=begin vim perl
+
+  router as {
+    wrap 'Plack::Middleware::Session' => ( store => literal( 'File' ));
+  
+    wrap_if( sub { $_[0]->{PATH_INFO} =~ m{^/admin} },
+             'OXauth::Middleware::Auth' => ( model => 'model' ));
+  
+    route '/'             => 'root_controller.index';
+    route '/admin/login'  => 'auth_controller.login' , ( name => 'login' );
+    route '/admin/logout' => 'auth_controller.logout';
+    route '/admin'        => 'admin_controller.index';
+  };
+  
+=end vim 
+
+After updating any hard-coded template URLs, the application will
+continue to function identically, with no other code changes
+needed. This should emphasize how the flexible mapping between URL
+routes and methods called on resolved services, along with the
+name-based lookups available via the C<uri_for> method, makes it
+trivial to reorganize your URL organization scheme B<or> your code,
+independently of each other.
 
 =head1 I Find Your Lack Of Authorization Disturbing
 
