@@ -1,0 +1,208 @@
+Title: Authentication III: Return Of The Middleware
+Topic: OX
+Author: John SJ Anderson <john.anderson@iinteractive.com>
+
+=head1 Our Story So Far 
+
+We've seen L<how to use middleware for simple
+authentication|http://iinteractive.github.com/OX/advent/2012-12-15.html>
+as well as L<a more complicated model-based authentication and
+authorization
+scheme|http://iinteractive.github.com/OX/advent/2012-12-18.html>. For
+most applications the former is far too simplistic, and if you're
+working on a reasonably complicated project, the latter has one large
+flaw: you have to remember to manually check for authentication and
+authorization, in every method that requires them. Eventually somebody
+will forget to add that one critical line when they're writing a new
+method, and then you have a problem.
+
+One potential fix, since L<OX> is really just L<Moose> under the
+covers, is to use an C<around> method modifier in your controller
+classes. While that approach can be made to work, it's not the best
+solution. Instead, let's return to middleware -- custom middleware, to
+be precise.
+
+=head1 A More Elegant Approach, For A More Civilized Application
+
+We'll use the same C<OXauth> demo application as the earlier,
+model-based authentication example, but change it to use a custom
+middleware. On the application level, the change is pretty minor, we
+just add an additional C<wrap_if> statement to the C<router> block,
+that applies the authentication middleware if the request path matches
+C</admin>. We also add a C<name> attribute for the C<login> action --
+we'll see how and where that gets used shortly.
+
+(The code for this version of the application is available in the
+L<OXauth repo|https://github.com/genehack/oxauth> in the
+C<middleware-auth> branch.)
+
+=begin vim perl
+
+  package OXauth;
+  # ABSTRACT: OX advent auth example
+  use OX;
+  use 5.010;
+  
+  use OXauth::Schema;
+  
+  has connect_info => ( is => 'ro', isa => 'ArrayRef' , required => 1 );
+  
+  has model => (
+    is           => 'ro' ,
+    isa          => 'OXauth::Schema' ,
+    dependencies => [ 'connect_info' ] ,
+    lifecycle    => 'Singleton' ,
+    block        => sub {
+      OXauth::Schema->connect( @{ shift->param( 'connect_info' )} )
+    } ,
+  );
+  
+  has cache_dir     => ( is => 'ro' , isa => 'Str' , required => 1 );
+  has template_root => ( is => 'ro' , isa => 'Str' , required => 1 );
+  
+  has view => (
+    is           => 'ro' ,
+    isa          => 'Text::Xslate' ,
+    dependencies => {
+      cache_dir => 'cache_dir' ,
+      path      => 'template_root' ,
+    },
+  );
+  
+  has admin_controller => (
+    is    => 'ro' ,
+    isa   => 'OXauth::Controller::Admin' ,
+    infer => 1 ,
+  );
+  
+  has auth_controller => (
+    is    => 'ro' ,
+    isa   => 'OXauth::Controller::Auth' ,
+    infer => 1 ,
+  );
+  
+  has root_controller => (
+    is    => 'ro',
+    isa   => 'OXauth::Controller::Root' ,
+    infer => 1 ,
+  );
+  
+  router as {
+    wrap 'Plack::Middleware::Session' => ( store => literal( 'File' ));
+  
+    wrap_if( sub { $_[0]->{PATH_INFO} =~ m{^/admin} },
+             'OXauth::Middleware::Auth' => ( model => 'model' ));
+  
+    route '/'       => 'root_controller.index';
+    route '/login'  => 'auth_controller.login' , ( name => 'login' );
+    route '/logout' => 'auth_controller.logout';
+    route '/admin'  => 'admin_controller.index';
+  };
+  
+  __PACKAGE__->meta->make_immutable;
+  1;
+
+=end vim
+
+That C<wrap_if> line is given the PSGI request environment as an
+argument. We look to see if the path of the current request matches
+the part of the application that requires authentication. If that
+inline C<sub> returns a true value, the middleware will be
+included. Any arguments to the middleware will be resolved as
+L<Bread::Board> services -- so this middleware will receive the
+C<model> service.
+
+All the real action happens in the custom middleware, so let's look at
+that now.
+
+=head1 The Middleware Is Strong In This One
+
+"Custom middleware" sounds pretty daunting, but in the end it's
+not. You write a L<MooseX::NonMoose> class that extends
+L<Plack::Middleware>, and provide a C<call> callback method, which
+will get passed the PSGI environment. Writing the middleware as a
+L<Moose> class means we can define attributes (C<model>, in the case
+below) which are provided via OX's use of Bread::Board service
+resolution.
+
+=begin vim perl
+
+  package OXauth::Middleware::Auth;
+  use Moose;
+  use MooseX::NonMoose;
+  extends 'Plack::Middleware';
+  
+  use HTTP::Throwable::Factory 'http_exception';
+  use OX::Request;
+  
+  has model => (
+    is       => 'ro',
+    isa      => 'OXauth::Schema' ,
+    required => 1,
+    handles  => [ qw/ load_user / ] ,
+  );
+  
+  sub call {
+    my( $self , $env ) = @_;
+  
+    my $req = OX::Request->new(env => $env);
+  
+    my $login_url = $req->uri_for({action => 'login'});
+  
+    # load the user data if there's a user_id set in the session
+    if ( my $id = $req->session->{user_id} ) {
+      $req->session->{user} = $self->load_user( $id );
+    }
+  
+    # if we have a user or if we're trying to login, carry on
+    if ( $req->session->{user} || $req->uri->path eq $login_url) {
+      return $self->app->($env);
+    }
+    # otherwise redirect to the login url
+    else {
+      return http_exception(Found => {
+        location => $login_url,
+      })->as_psgi;
+    }
+  }
+  
+  __PACKAGE__->meta->make_immutable;
+  1;
+
+=end vim
+
+The line that uses the C<uri_for> method is the reason why we added a
+C<name> attribute to the C</login> route -- that allows us to have a
+consistent stable identifier for that routing even if the path part or
+the controller method that it invokes is renamed. (See the
+L<C<uri_for>|2012-12-09.html> entry earlier in the calendar for more
+information.)
+
+The logic here is very simple -- if there's a C<user_id> key set in
+the session, we load up that user from the database. If there's a user
+in the session or if we're trying to load the login URL, we return a
+PSGI application instance containing the environment -- which will
+allow for further routing or middleware application to happen.
+
+If we don't have a user and aren't trying to login, we instead throw
+an exception that will cause a redirect to the login URL to be issued.
+
+All the code for the C<login> and C<logout> methods in
+C<OXauth::Controller::Auth> remains exactly the same as in the earlier
+example (with one tiny addition -- the C<logout> method clears the
+C<user> key in the session hash in addition to C<user_id>.)
+
+=head1 I Find Your Lack Of Authorization Disturbing
+
+The earlier model-based example included an authorization component
+which this example lacks. Extending the middleware to support that
+would not be difficult, however. One approach would be to have a
+'config' service that defines which roles have access to which paths,
+and then add that service as an additional parameter to the
+middleware, which could then add in a permissions check once a user
+was loaded. At that point it would probably be easier to include your
+custom authentication middleware unconditionally (I<i.e.>, via a
+normal C<wrap> statement) and use the C<config> service to determine
+both whether authentication was needed, and if so, what authorizations
+were also required.
+
