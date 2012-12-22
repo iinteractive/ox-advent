@@ -1,0 +1,90 @@
+Title: Wrapping things up
+Topic: OX
+Author: Jesse Luehrs <jesse.luehrs@iinteractive.com>
+
+=head1 Taking a step back
+
+So now that we've seen all of the things that OX is capable of, I hope that you
+have a better idea of how you can use OX in your own applications. We've been
+using OX internally at work for quite some time, and it has been very
+successful in making our applications more readable, configurable, and
+testable.
+
+Being able to structure our apps as the design requires rather than requiring a
+specific layout of classes has been a huge win, both in encouraging us to
+actually think about the design of the application and in allowing us to more
+generally share components between applications. Basing OX on Bread::Board has
+also made it much easier to integrate into our other applications which already
+have a Bread::Board structure.
+
+OX has also provided solutions for some of the more common pain points we have
+run into with other frameworks. Things like being able to easily rearrange URL
+structures and reuse application components outside of the context of a web
+request have been huge helps in making our code more flexible to accomodating
+client requests. Having a centralized router definition and using Perl concepts
+like method calling and exceptions in favor of framework-specific concepts like
+forwarding and detaching actions has made it much easier to jump into code and
+see exactly which code will be run for a given request.
+
+Finally, focusing on tying together existing code rather than requiring a lot
+of glue encourages writing reusable code. There have been several instances of
+being able to release something as a generic Plack middleware (or something
+along those lines) that can be used by other people and other frameworks, which
+may not have happened had our framework required its own custom plugin system.
+It also helps with being able to reuse internal components between
+applications, especially if not all of those applications use OX.
+
+=head1 Moving forward
+
+Although we use OX at work, this doesn't provide a very wide range of
+experience with its various capabilities. Right now, we could really use more
+people using it, to give more different perspectives on how well the different
+features work. While we're fairly confident about the way most parts work,
+there are certain aspects that are newer or less well tested:
+
+=over 4
+
+=item *
+
+Route builders
+
+Is the default set of route builders sufficient, or are there more common
+patterns we want to provide? Also, is the interface for writing and using
+custom route builders straightforward and functional enough?
+
+=item *
+
+Auto-encoding
+
+Auto-encoding everything as UTF-8 by default is clearly the right way to go for
+new code, but the way we interface with this currently is a bit clunky (since
+not all endpoints will want to be auto-encoded - for instance, downloads of
+binary files). Can we provide a better way to do this?
+
+=item *
+
+Router block configuration
+
+There are cases where we want to only enable parts of the application under
+certain configurations - we may want to include extra debugging code only on
+staging servers, for instance, or our application may have several different
+states that it needs to switch between depending on configuration that we
+update at various points dictated by the client. Right now, the router block is
+fixed, and must be declared before any instance of the application is created,
+which means we can't access any of the configuration data that is passed to the
+application's constructor. What is a good solution here?
+
+=back
+
+In addition, we are also very open to new ideas, if the current interfaces are
+not sufficient for your needs. Although we've put a decent amount of effort
+into making things easy to get running, certain aspects are still more low
+level than perhaps they should be. Identifying which aspects these are requires
+more use in real world situations.
+
+We keep the current TODO list in the
+L<GitHub wiki|https://github.com/iinteractive/ox/wiki>, so if you have any
+feedback on items in that list, or new ideas for things you think we should
+consider, please do also let us know.
+
+=cut
