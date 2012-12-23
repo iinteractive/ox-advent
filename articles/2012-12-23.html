@@ -1,0 +1,373 @@
+Title: A form2email gateway in OX
+Topic: OX
+Author: John SJ Anderson <john.anderson@iinteractive.com>
+
+=head1 A Friend In Need
+
+Recently, a friend asked me for a favor -- she needed to collect
+vendor registration information for a conference she was
+organizing. Her internal IT staff didn't have the resources to help
+her and none of the free options (such as Google Forms) would
+work. Thanks to L<OX> and a number of other CPAN modules, I was able
+to quickly throw something together to help my friend out.
+
+While I can't share the exact application I built for my friend, I can
+walk you through the general outline of how I quickly combined L<OX>,
+L<Text::Xslate>, L<Data::Verifier>,
+L<Bootstrap|http://twitter.github.com/bootstrap/> and a few other Perl
+modules to solve this problem.
+
+=head1 Form Goes In, Email Comes Out
+
+The form2email gateway -- a program that displays a web form and then
+emails the contents of that web form to a configured address -- is
+among the oldest types of CGI programs we have. Let's see what an OX
+version of one looks like.
+
+(All the code discussed below is available from L<this github
+repo|https://github.com/genehack/oxform2mail>; install missing
+dependencies by running C<cpanm Dist::Zilla && dzil listdeps |
+cpanm>.)
+
+=begin vim perl
+
+  package OXform2email;
+  # ABSTRACT: OX advent form2email example
+  use OX;
+  use 5.016;
+
+  has email_from    => ( is => 'ro' , isa => 'Str' , required => 1 );
+  has email_subject => ( is => 'ro' , isa => 'Str' , required => 1 );
+  has email_to      => ( is => 'ro' , isa => 'Str' , required => 1 );
+
+  has email_view =>(
+    is           => 'ro' ,
+    isa          => 'OXform2email::View::Email' ,
+    dependencies => [ qw/ email_from email_subject email_to / ] ,
+  );
+
+  has cache_dir     => ( is => 'ro' , isa => 'Str' , required => 1 );
+  has static_root   => ( is => 'ro' , isa => 'Str' , required => 1 );
+  has template_root => ( is => 'ro' , isa => 'Str' , required => 1 );
+
+  has html_view => (
+    is           => 'ro' ,
+    isa          => 'OXform2email::View::HTML' ,
+    dependencies => [ qw/ cache_dir template_root / ] ,
+  );
+
+  has verifier_config => ( is => 'ro' , isa => 'HashRef' , required => 1 );
+
+  has verifier => (
+    is           => 'ro' ,
+    isa          => 'Data::Verifier',
+    dependencies => [ 'verifier_config' ] ,
+    block        => sub {
+      Data::Verifier->new( shift->param( 'verifier_config' ))
+    } ,
+  );
+
+  has controller => (
+    is    => 'ro' ,
+    isa   => 'OXform2email::Controller',
+    infer => 1 ,
+  );
+
+  router as {
+    wrap 'Plack::Middleware::Static' => (
+      root => 'static_root',
+      path => literal( qr{^/(?:css)/} ),
+    );
+
+    route '/' => 'controller' , ( name => 'index' );
+  };
+
+  __PACKAGE__->meta->make_immutable;
+  1;
+
+=end vim
+
+We have two view components -- an C<email_view> and an C<html_view> --
+each of which has some required dependencies (these are supplied via
+the application config file). Additionally, we have an input validation
+component, in the form of a L<Data::Verifier> instance, as well as a
+single controller.
+
+From looking at the router block, you can see we're making use of the
+L<HTTPMethod|OX::RouteBuilder::HTTPMethod> route builder (see
+L<Jesse's earlier RouteBuilder
+article|http://iinteractive.github.com/OX/advent/2012-12-02.html> if
+you need more details on RouteBuilders). We're also using
+L<Plack::Middleware::Static>, just to serve a local copy of the
+Bootstrap CSS file.
+
+=head1 You GET Some, You POST Some
+
+Using the HTTPMethod route builder means that the controller needs to
+implement methods based on the HTTP verbs it wants to respond to. For
+our purposes, there are two: C<get> -- which we'll respond to when
+displaying an initial, empty copy of our form -- and C<post> -- which
+we'll respond to when the form is submitted. Here's our controller code:
+
+=begin vim perl
+
+  package OXform2email::Controller;
+  use Moose;
+
+  has email_view => (
+    is       => 'ro' ,
+    isa      => 'OXform2email::View::Email' ,
+    required => 1 ,
+    handles  => [ qw/ send_email / ] ,
+  );
+
+  has html_view => (
+    is       => 'ro',
+    isa      => 'OXform2email::View::HTML',
+    handles  => [ qw/ render / ] ,
+    required => 1 ,
+  );
+
+  has verifier => (
+    is       => 'ro' ,
+    isa      => 'Data::Verifier',
+    handles  => [ qw/ verify / ] ,
+    required => 1 ,
+  );
+
+  sub get {
+    my( $self , $req ) = @_;
+
+    # a GET means that we need to show a blank form...
+    $self->render( $req , 'index' );
+  }
+
+  sub post {
+    my( $self , $req ) = @_;
+
+    # a POST means we need to process a submission and either show the thanks
+    # page or redisplay the form
+
+    my $results = $self->verify( $req->parameters );
+
+    if ( $results->success ) {
+      $self->send_email({ $results->valid_values });
+      $self->render( $req , 'thanks' );
+    }
+    else {
+      $self->render( $req , 'index' , { dv => $results });
+    }
+  }
+
+  __PACKAGE__->meta->make_immutable;
+  1;
+
+=end vim
+
+The controller is a simple Moose class, that requires C<email_view>,
+C<html_view>, and C<verifier> attributes to be provided. Since we set
+the C<infer> key on the attribute for this controller in the OX
+application class, OX will handle instantiating and providing all of
+those required services when creating our controller instance.
+
+As I mentioned above, we have two methods: C<get> and C<post>. The
+C<get> method simply uses the C<render> method (delegated to the
+C<html_view> attribute) to display the C<index> template.
+
+The real action is in the C<post> method. We use the C<verify> method
+(delegated to the C<verifier> attribute) to make sure our inputs match
+the validation profile specified in the application configuration. If
+they do, use the C<send_email> method (delegated to the C<email_view>)
+to email the form data to the configured destination, and then we
+display a "thank you" page.
+
+If the data verification step fails, we re-display the form page, this
+time providing the L<Data::Verifier::Results> object. Our template
+will use the data inside that object to provide useful feedback to our
+user about why the form validation failed.
+
+=head2 Email View
+
+The email view class is currently implemented as a simple wrapper
+around L<Email::Sender::Simple>, L<Email::Simple>, and
+L<Data::Printer>.
+
+=begin vim perl
+
+  package OXform2email::View::Email;
+  use Moose;
+
+  use Data::Printer;
+  use Email::Sender::Simple qw/ sendmail /;
+  use Email::Simple;
+  use Email::Simple::Creator;
+
+  has email_from    => ( is => 'ro' , isa => 'Str' , required => 1 );
+  has email_subject => ( is => 'ro' , isa => 'Str' , required => 1 );
+  has email_to      => ( is => 'ro' , isa => 'Str' , required => 1 );
+
+  sub send_email {
+    my( $self , $data ) = @_;
+
+    my $body = p $data;
+
+    my $email = Email::Simple->create(
+      header => [
+        To      => $self->email_to ,
+        From    => $self->email_from,
+        Subject => $self->email_subject ,
+      ] ,
+      body => $body ,
+    );
+
+    sendmail( $email );
+  };
+
+  __PACKAGE__->meta->make_immutable;
+  1;
+
+=end vim
+
+We dump the data structure out into a string, construct an email
+message using information that's been passed in from the application
+configuration, and then send that mail out.
+
+=head2 HTML View
+
+The HTML view is similiarly simple:
+
+=begin vim perl
+
+  package OXform2email::View::HTML;
+  use Moose;
+  
+  use Text::Xslate;
+  
+  has cache_dir     => ( is => 'ro' , isa => 'Str' , required => 1 );
+  has template_root => ( is => 'ro' , isa => 'Str' , required => 1 );
+  
+  has xslate => (
+    is      => 'ro' ,
+    isa     => 'Text::Xslate' ,
+    lazy    => 1 ,
+    default => sub {
+      my $self = shift;
+      return Text::Xslate->new(
+        cache_dir => $self->cache_dir  ,
+        path      => [ $self->template_root ] ,
+      );
+    },
+  );
+  
+  sub render {
+    my( $self , $r , $page , $args ) = @_;
+  
+    $args //= {};
+    $args->{r} = $r;
+  
+    return $self->xslate->render( "$page.tx" , $args );
+  }
+  
+  __PACKAGE__->meta->make_immutable;
+  1;
+  
+=end vim
+
+Here we're wrapping a L<Text::Xslate> instance and proving a C<render>
+method, which just does some argument munging and then calls the
+C<render> method on the C<Text::Xslate> instance.
+
+=head1 Refactorability Included 
+
+Hopefully by this point in the OX Advent calendar, you can see how
+easy it would be to modify the code we've seen so far to allow the
+email view to send HTML emails. It would be as easy as moving the
+C<Text::Xslate> component out of the HTML view up into the application
+class itself, and then making both C<html_view> and C<email_view>
+depend on that service (and adding an attribute to the email view
+class to store that service).
+
+=head1 Configuration
+
+Let's take a quick look at the application config:
+
+=begin vim yaml
+
+  ---
+  email_from: '"OX Form2Email" <donotreply@example.com>'
+  email_to: example@example.com
+  email_subject: "More Awesome User Feedback"
+  verifier_config:
+    filters:
+      - trim
+    profile:
+      name:
+        required: 1
+        type: Str
+      email:
+        required: 1
+        type: Str
+      comment:
+        required: 1
+        type: Str
+  cache_dir: /tmp/oxform2email
+  static_root: ./static
+  template_root: tx
+
+=end vim
+
+You can see we have the input validation config embedded right in the
+middle there -- 3 fields, name, email, and a comment, all
+required. Making the verification profile part of the configuration
+means it's easy to adapt to new forms -- no code needs to change.
+
+=head1 My Templates, Let Me Show You Them
+
+The application is using L<Text::Xslate> and a small set of form
+generation macros. I'm not going to show the macros here -- they're in
+L<the repository|https://github.com/genehack/oxform2mail> if you're
+interested -- but they pretty much do what you'd expect in terms of
+generating input fields that have the appropriate Bootstrap classes
+applied. The macros will also make use of the provided
+L<Data::Verifier> instance to indicate missing required fields, and to
+restore the value of form fields when needed. Here's what the C<index>
+template looks like:
+
+=begin vim html
+
+  : my $title = 'We Welcome Your Feedback'
+  : cascade wrapper with macros { title => $title }
+  
+  : override content -> {
+        <h1><: $title :></h1>
+    : if( $dv and ! $dv.success ) {
+        <h2 class="error">ERROR!</h2>
+    : }
+        <form class="form-horizontal" action="<: $r.uri_for( 'index' ) :>" method="POST">
+    : textfield( 'name' , 'Your name' );
+    : textfield( 'email' , 'Your email' );
+    : textarea( 'comment' , 'Your comment' );
+    : submit( 'submit' , 'Give Us Your Thoughts' );
+        </form>
+  : }
+
+=end vim
+
+The C<textfield>, C<textarea>, and C<submit> macros are all defined in
+the base C<wrapper.tx>. The other thing to note in this template is
+the use of the C<uri_for> method being called on the L<OX::Request>
+object that is added into the argument list.
+
+=head1 Patches Welcome
+
+My friend's form needs were modest (and getting me involved eventually
+shamed her internal IT department into doing the work for her, so my
+version wasn't used, in the end), but with a bit more work on the
+C<macros.tx> file, to add more form element types, this simple
+application could be an easy drop-in-place form to email
+gateway. Hopefully seeing this example of an easily deployable,
+configurable, PSGI-pluggable OX application inspires you to give OX a
+shot the next time you need to do a quick favor for a friend (or even
+the next time you need to do a large project for work...)
+
+=cut
